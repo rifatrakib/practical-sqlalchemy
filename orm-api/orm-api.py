@@ -1,6 +1,9 @@
 import sqlalchemy
 from sqlalchemy.sql import exists
-from sqlalchemy import Column, Integer, String, ForeignKey, create_engine, text, func
+from sqlalchemy import (
+    Table, Column, Integer, String, Text,
+    ForeignKey, create_engine, text, func,
+)
 from sqlalchemy.orm import (
     sessionmaker, declarative_base, aliased,
     relationship, selectinload, joinedload, contains_eager,
@@ -20,8 +23,23 @@ class User(Base):
     fullname = Column(String)
     nickname = Column(String)
     
+    addresses = relationship("Address", back_populates="user", cascade="all, delete, delete-orphan")
+    
     def __repr__(self):
         return f"<User(name={self.name}, fullname={self.fullname}, nickname={self.nickname})>"
+
+
+class Address(Base):
+    __tablename__ = "addresses"
+    
+    id = Column(Integer, primary_key=True)
+    email_address = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    
+    user = relationship("User", back_populates="addresses")
+    
+    def __repr__(self):
+        return f"<Address(email_address={self.email_address})>"
 
 
 print(f"{User.__table__ = }")
@@ -146,20 +164,6 @@ print(f"{result = }")
 print(f"{session.query(func.count('*')).select_from(User).scalar() = }")
 print(f"{session.query(func.count(User.id)).scalar() = }")
 
-
-class Address(Base):
-    __tablename__ = "addresses"
-    
-    id = Column(Integer, primary_key=True)
-    email_address = Column(String, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    
-    user = relationship("User", back_populates="addresses")
-    
-    def __repr__(self):
-        return f"<Address(email_address={self.email_address})>"
-
-
 User.addresses = relationship("Address", order_by=Address.id, back_populates="user")
 Base.metadata.create_all(engine)
 
@@ -267,11 +271,73 @@ jacks_addresses = (
 print(f"{jacks_addresses = }")
 print(f"{jacks_addresses[0].user = }")
 
-session.delete(jack)
-session.query(User).filter_by(name="jack").count()
-
+jack = session.get(User, 5)
+del jack.addresses[1]
 session.query(Address).filter(
     Address.email_address.in_(["jack@google.com", "j25@yahoo.com"])
 ).count()
 
-session.close()
+session.delete(jack)
+session.query(User).filter_by(name="jack").count()
+session.query(Address).filter(
+    Address.email_address.in_(["jack@google.com", "j25@yahoo.com"])
+).count()
+
+post_keywords = Table(
+    "post_keywords",
+    Base.metadata,
+    Column("post_id", ForeignKey("posts.id"), primary_key=True),
+    Column("keyword_id", ForeignKey("keywords.id"), primary_key=True),
+)
+
+
+class BlogPost(Base):
+    __tablename__ = "posts"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    headline = Column(String(255), nullable=False)
+    body = Column(Text)
+    
+    # many to many BlogPost<->Keyword
+    keywords = relationship("Keyword", secondary=post_keywords, back_populates="posts")
+    
+    def __init__(self, headline, body, author):
+        self.headline = headline
+        self.body = body
+        self.author = author
+    
+    def __repr__(self):
+        return f"BlogPost({self.headline}, {self.body}, {self.author})"
+
+
+class Keyword(Base):
+    __tablename__ = "keywords"
+    
+    id = Column(Integer, primary_key=True)
+    keyword = Column(String(50), nullable=False, unique=True)
+    
+    posts = relationship("BlogPost", secondary=post_keywords, back_populates="keywords")
+    
+    def __init__(self, keyword):
+        self.keyword = keyword
+
+
+BlogPost.author = relationship(User, back_populates="posts")
+User.posts = relationship(BlogPost, back_populates="author", lazy="dynamic")
+Base.metadata.create_all(engine)
+
+wendy = session.query(User).filter_by(name="wendy").one()
+post = BlogPost("Wendy's blog post", "This is a test", wendy)
+session.add(post)
+
+post.keywords.append(Keyword("wendy"))
+post.keywords.append(Keyword("firstpost"))
+
+session.query(BlogPost).filter(BlogPost.keywords.any(keyword="firstpost")).all()
+
+session.query(BlogPost).filter(BlogPost.author == wendy).filter(
+    BlogPost.keywords.any(keyword="firstpost")
+).all()
+
+wendy.posts.filter(BlogPost.keywords.any(keyword="firstpost")).all()
