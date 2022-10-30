@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Table
+from sqlalchemy import Column, Integer, String, Table, inspect, create_engine
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -22,3 +22,9 @@ user_table = Table(
     Column("fullname", String),
     Column("nickname", String),
 )
+
+user_table = User.__table__
+print(f"{user_table = }")
+
+user_table = inspect(User).local_table
+print(f"{user_table = }")
