@@ -27,3 +27,12 @@ A `declaratively mapped class` will __always include__ an attribute called `__ta
 The above table is __ultimately the same__ one that _corresponds_ to the `Mapper.local_table` attribute, which we can see through the `runtime inspection system`.
 
 The `MetaData` collection _associated_ with both the `declarative registry` as well as the `base class` is __frequently necessary__ in order to _run DDL operations_ such as `CREATE`, as well as in _use with migration tools_ such as [`Alembic`](https://alembic.sqlalchemy.org/en/latest/index.html). This object is available via the `.metadata` attribute of `registry` as well as the `declarative base class`.
+
+
+#### Declarative Table Configuration
+
+When using `Declarative Table configuration` with the `__tablename__` declarative class attribute, _additional arguments_ to be supplied to the `Table` constructor should be provided using the `__table_args__` declarative class attribute.
+
+This attribute __accommodates both positional as well as keyword arguments__ that are normally sent to the `Table` constructor. The attribute _can be specified_ in __one of two forms__. One is as a `dictionary`. The other, a `tuple`, where _each argument_ is `positional` (__usually constraints__). _Keyword arguments_ can be specified with the above form by specifying the __last argument__ as a `dictionary`.
+
+A class _may also specify_ the `__table_args__` declarative attribute, as well as the `__tablename__` attribute, in a __dynamic style__ using the `declared_attr()` method _decorator_. See the section `Mixin and Custom Base Classes` for examples on how this is often used.

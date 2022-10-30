@@ -28,3 +28,6 @@ print(f"{user_table = }")
 
 user_table = inspect(User).local_table
 print(f"{user_table = }")
+
+engine = create_engine("sqlite://")
+Base.metadata.create_all(engine)
