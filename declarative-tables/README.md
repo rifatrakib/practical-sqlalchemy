@@ -52,3 +52,40 @@ A _declarative table configuration_ __allows the addition__ of _new_ `Column` ob
 For a `declarative class` that is _declared_ using a `declarative base class`, the _underlying metaclass_ `DeclarativeMeta` includes a `__setattr__()` method that will __intercept additional `Column` objects__ and __add them to both__ the `Table` using `Table.append_column()` as well as to the __existing Mapper__ using `Mapper.add_property()`.
 
 _Additional_ `Column` _objects_ may also be __added to a mapping__ in the specific circumstance of using __`single table inheritance`__, where _additional columns_ are __present on mapped subclasses__ that have __no `Table` of their own__. This is illustrated in the section `Single Table Inheritance`.
+
+
+#### Declarative with Imperative Table (a.k.a. Hybrid Declarative)
+
+`Declarative mappings` may also be provided with a _pre-existing_ `Table` object, or otherwise a `Table` or other arbitrary `FromClause` construct (such as a `Join` or `Subquery`) that is __constructed separately__.
+
+This is referred to as a __`"hybrid declarative" mapping`__, as the class is mapped using the _declarative style_ for everything involving the `mapper configuration`, however the _mapped_ `Table` _object_ is __produced separately__ and _passed_ to the `declarative process` __directly__.
+
+Above, a `Table` object is constructed using the approach described at `Describing Databases with MetaData`. It __can then be applied directly__ to a class that is `declaratively mapped`. The `__tablename__` and `__table_args__` _declarative class attributes_ are __not used__ in this form. The above _configuration_ is __often more readable__ as an _inline definition_.
+
+A _natural effect_ of the above style is that the `__table__` attribute is itself __defined within the `class definition block`__. As such it __may be immediately referred__ towards _within subsequent attributes_, such as the example below which illustrates _referring to the type column_ in a __polymorphic__ `mapper configuration`.
+
+The __`"imperative table"`__ form is also used when a __non-`Table` construct__, such as a `Join` or `Subquery` object, is _to be mapped_.
+
+```
+subq = (
+    select(
+        func.count(orders.c.id).label("order_count"),
+        func.max(orders.c.price).label("highest_order"),
+        orders.c.customer_id,
+    ).group_by(orders.c.customer_id).subquery()
+)
+
+customer_select = (
+    select(customers, subq).
+    join_from(customers, subq, customers.c.id == subq.c.customer_id).
+    subquery()
+)
+
+
+class Customer(Base):
+    __table__ = customer_select
+```
+
+For _background_ on `mapping to non-Table constructs` see the sections `Mapping a Class against Multiple Tables` and `Mapping a Class against Arbitrary Subqueries`.
+
+The `"imperative table"` form is of particular use __when the class itself is using an alternative form of attribute declaration__, such as `Python dataclasses`. See the section `Applying ORM Mappings to an existing dataclass` for detail.
