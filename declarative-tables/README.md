@@ -98,3 +98,17 @@ There are _several patterns available_ which provide for producing _mapped class
 A _very simple way_ to __map a class to a table reflected from the database__ is to use a `declarative hybrid mapping`, passing the `Table.autoload_with` parameter to the `Table`.
 
 A __major downside__ to the above approach is that the _mapped classes cannot be declared until the tables have been reflected_, which __requires__ the `database connectivity source` __to be present__ while the `application classes` are _being declared_; it's _typical_ that _classes are declared as the modules of an application are being imported_, but `database connectivity` __isn't available until the application starts__ running code so that it can _consume configuration information_ and __create an engine__. There are _currently_ `two approaches` to __working around__ this.
+
+
+##### Using DeferredReflection
+
+To _accommodate_ the use case of _declaring mapped classes_ where `reflection of table metadata` can __occur afterwards__, a _simple extension_ called the `DeferredReflection mixin` is available, which __alters__ the _declarative mapping process_ to be __delayed until__ a special class-level `DeferredReflection.prepare()` method is called, which will __perform the reflection process__ against a `target database`, and will _integrate the results_ with the `declarative table mapping process`, that is, classes which use the `__tablename__` attribute.
+
+Above, we create a _mixin class_ `Reflected` that will __serve as a base__ for classes in our _declarative hierarchy_ that should become mapped when the `Reflected.prepare` method is called. The above mapping is __not complete until we do so__, given an `Engine`.
+
+The _purpose_ of the `Reflected` class is to __define the scope at which classes should be reflectively mapped__. The plugin will _search_ among the `subclass tree` of the target against which `.prepare()` is called and __reflect all tables which are named by declared classes__; tables in the _target database_ that are _not part of mappings_ and are _not related to the target tables via foreign key constraint_ __will not be reflected__.
+
+
+##### Using Automap
+
+A more _automated solution_ to __mapping against an existing database__ where _table reflection_ is to be used is to use the `Automap` extension. This extension will __generate entire mapped classes from a database schema__, __including relationships between classes__ based on _observed_ `foreign key` _constraints_. While it _includes hooks for customization_, such as hooks that allow __custom class naming__ and __relationship naming__ schemes, `automap` is oriented towards an expedient __zero-configuration style of working__. If an application wishes to have a _fully explicit model_ that makes use of _table reflection_, the `Using DeferredReflection` may be _preferable_.
