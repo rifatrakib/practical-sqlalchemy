@@ -36,3 +36,19 @@ When using `Declarative Table configuration` with the `__tablename__` declarativ
 This attribute __accommodates both positional as well as keyword arguments__ that are normally sent to the `Table` constructor. The attribute _can be specified_ in __one of two forms__. One is as a `dictionary`. The other, a `tuple`, where _each argument_ is `positional` (__usually constraints__). _Keyword arguments_ can be specified with the above form by specifying the __last argument__ as a `dictionary`.
 
 A class _may also specify_ the `__table_args__` declarative attribute, as well as the `__tablename__` attribute, in a __dynamic style__ using the `declared_attr()` method _decorator_. See the section `Mixin and Custom Base Classes` for examples on how this is often used.
+
+
+#### Explicit Schema Name with Declarative Table
+
+The _schema name_ for a `Table` as documented at `Specifying the Schema Name` is __applied to an individual `Table`__ using the `Table.schema` argument. When using `Declarative tables`, this option is __passed like any other__ to the `__table_args__` dictionary.
+
+The _schema name_ can also be __applied to all `Table` objects globally__ by using the `MetaData.schema` parameter documented at `Specifying a Default Schema Name with MetaData`. The `MetaData` object may be __constructed separately__ and _passed_ either to `registry()` or `declarative_base()`.
+
+
+##### Appending additional columns to an existing Declarative mapped class
+
+A _declarative table configuration_ __allows the addition__ of _new_ `Column` objects to an _existing mapping_ __after__ the `Table` metadata has _already been generated_.
+
+For a `declarative class` that is _declared_ using a `declarative base class`, the _underlying metaclass_ `DeclarativeMeta` includes a `__setattr__()` method that will __intercept additional `Column` objects__ and __add them to both__ the `Table` using `Table.append_column()` as well as to the __existing Mapper__ using `Mapper.add_property()`.
+
+_Additional_ `Column` _objects_ may also be __added to a mapping__ in the specific circumstance of using __`single table inheritance`__, where _additional columns_ are __present on mapped subclasses__ that have __no `Table` of their own__. This is illustrated in the section `Single Table Inheritance`.
