@@ -89,3 +89,12 @@ class Customer(Base):
 For _background_ on `mapping to non-Table constructs` see the sections `Mapping a Class against Multiple Tables` and `Mapping a Class against Arbitrary Subqueries`.
 
 The `"imperative table"` form is of particular use __when the class itself is using an alternative form of attribute declaration__, such as `Python dataclasses`. See the section `Applying ORM Mappings to an existing dataclass` for detail.
+
+
+#### Mapping Declaratively with Reflected Tables
+
+There are _several patterns available_ which provide for producing _mapped classes_ against a _series_ of `Table` objects that were __introspected from the database__, using the _reflection process_ described at `Reflecting Database Objects`.
+
+A _very simple way_ to __map a class to a table reflected from the database__ is to use a `declarative hybrid mapping`, passing the `Table.autoload_with` parameter to the `Table`.
+
+A __major downside__ to the above approach is that the _mapped classes cannot be declared until the tables have been reflected_, which __requires__ the `database connectivity source` __to be present__ while the `application classes` are _being declared_; it's _typical_ that _classes are declared as the modules of an application are being imported_, but `database connectivity` __isn't available until the application starts__ running code so that it can _consume configuration information_ and __create an engine__. There are _currently_ `two approaches` to __working around__ this.
