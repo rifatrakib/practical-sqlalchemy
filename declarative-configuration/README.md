@@ -22,3 +22,34 @@ Things to note above:
 * With both _declararative table_ and _hybrid table_ mappings, when we define a `ForeignKey` construct, we _always name the target table_ using the __table name__, and __not the mapped class name__.
 
 * When we define `relationship()` constructs, as these constructs __create a linkage between two mapped classes__ where __one necessarily is defined before the other__, we can refer to the _remote class_ using its __string name__. This _functionality_ also __extends__ into the area of _other arguments_ specified on the `relationship()` such as the `"primary join"` and `"order by"` arguments. See the section `Late-Evaluation of Relationship Arguments` for details on this.
+
+
+#### Mapper Configuration Options with Declarative
+
+With _all_ mapping forms, the `mapping of the class` is __configured through parameters__ that become part of the `Mapper` object. The _function_ which __ultimately receives these arguments__ is the `mapper()` function, and are _delivered_ to it from one of the _front-facing mapping functions_ defined on the `registry` object.
+
+For the _declarative form_ of mapping, mapper arguments are specified using the `__mapper_args__` declarative class variable, which is a __dictionary that is passed as keyword arguments__ to the `mapper()` function.
+
+
+##### Map Specific Primary Key Columns
+
+The example below illustrates _Declarative-level settings_ for the `mapper.primary_key` parameter, which __establishes__ particular columns as part of what the `ORM` _should consider_ to be a __primary key for the class__, _independently_ of schema-level `primary key constraints`.
+
+
+##### Version ID Column
+
+The example below illustrates _Declarative-level settings_ for the `mapper.version_id_col` and `mapper.version_id_generator` parameters, which __configure an ORM-maintained version counter__ that is _updated and checked_ within the unit of work `flush process`.
+
+
+##### Single Table Inheritance
+
+The example below illustrates _Declarative-level settings_ for the `mapper.polymorphic_on` and `mapper.polymorphic_identity` parameters, which are used when __configuring a single-table inheritance mapping__.
+
+
+##### Constructing mapper arguments dynamically
+
+The `__mapper_args__` dictionary _may be generated_ from a __class-bound descriptor method__ rather than from a _fixed dictionary_ by making use of the `declared_attr()` construct. This is __useful to create arguments for mappers that are programmatically derived__ from the _table configuration or other aspects_ of the `mapped class`. A __dynamic `__mapper_args__` attribute__ will typically be useful when using a `Declarative Mixin` or `abstract base class`.
+
+For example, to __omit from the mapping__ _any columns that have a special_ `Column.info` value, a _mixin_ can use a `__mapper_args__` method that __scans for these columns__ from the `cls.__table__` attribute and passes them to the `mapper.exclude_properties` collection.
+
+Above, the `ExcludeColsWFlag` _mixin_ provides a __per-class `__mapper_args__` hook__ that will _scan_ for `Column` objects that __include the `key/value` `"exclude": True`__ passed to the `Column.info` parameter, and then add their string `"key"` name to the `mapper.exclude_properties` collection which will __prevent the resulting `Mapper` from considering these columns__ for any SQL operations.
