@@ -53,3 +53,31 @@ The `__mapper_args__` dictionary _may be generated_ from a __class-bound descrip
 For example, to __omit from the mapping__ _any columns that have a special_ `Column.info` value, a _mixin_ can use a `__mapper_args__` method that __scans for these columns__ from the `cls.__table__` attribute and passes them to the `mapper.exclude_properties` collection.
 
 Above, the `ExcludeColsWFlag` _mixin_ provides a __per-class `__mapper_args__` hook__ that will _scan_ for `Column` objects that __include the `key/value` `"exclude": True`__ passed to the `Column.info` parameter, and then add their string `"key"` name to the `mapper.exclude_properties` collection which will __prevent the resulting `Mapper` from considering these columns__ for any SQL operations.
+
+
+#### Other Declarative Mapping Directives
+
+* `__declare_last__()`: The `__declare_last__()` _hook_ __allows definition of a class level function__ that is _automatically called_ by the `MapperEvents.after_configured()` event, which occurs __after mappings are assumed to be completed__ and the __`"configure"` step has finished__.
+
+* `__declare_first__()`: Like `__declare_last__()`, but is called at the __beginning of mapper configuration__ via the `MapperEvents.before_configured()` event.
+
+* `metadata`: The `MetaData` collection _normally used to assign_ a __new `Table`__ is the `registry.metadata` attribute _associated with_ the `registry` object in use. When using a _declarative base class_ such as that __generated__ by `declarative_base()` as well as `registry.generate_base()`, this `MetaData` is also _normally present_ also as an _attribute_ named `.metadata` that's __directly on the base class__, and thus also on the __mapped class via inheritance__. _Declarative uses this attribute_, when present, in order to __determine the target `MetaData` collection__, or if _not present_, uses the `MetaData` __associated directly with the registry__.
+
+This _attribute_ may also be _assigned towards_ in order to __affect the `MetaData` collection__ to be used on a __per-mapped-hierarchy basis for a single base and/or registry__. This _takes effect whether a declarative base class is used_ or if the `registry.mapped()` _decorator is used directly_, thus _allowing patterns_ such as the `metadata-per-abstract base` example in the next section, `__abstract__`. A _similar pattern_ can be illustrated using `registry.mapped()` as follows.
+
+* `__abstract__`: `__abstract__` causes declarative to _skip the production of a table or mapper_ for the class __entirely__. A _class can be added within a hierarchy_ in the same way as `mixin` (see `Mixin and Custom Base Classes`), __allowing subclasses to extend just from the special class__. _One possible use_ of `__abstract__` is to __use a distinct `MetaData` for different bases__.
+
+Above, _classes which inherit from_ `DefaultBase` will use one `MetaData` as the __registry of tables__, and _those which inherit from_ `OtherBase` will __use a different one__. The _tables themselves_ can then be __created perhaps within distinct databases__.
+
+```
+DefaultBase.metadata.create_all(engine_one)
+OtherBase.metadata.create_all(engine_two)
+```
+
+* `__table_cls__`: Allows the _callable/class_ used to _generate_ a `Table` to be __customized__. This is a very `open-ended hook` that can __allow special customizations__ to a `Table` that one generates here.
+
+The above _mixin_ would cause _all_ `Table` _objects_ generated to __include the prefix `"custom_"`, followed by the name__ normally specified using the `__tablename__` attribute.
+
+`__table_cls__` also _supports_ the case of _returning_ `None`, which _causes the class_ to be __considered as single-table inheritance vs. its subclass__. This _may be useful in some customization schemes_ to determine that `single-table inheritance` should take place based on the _arguments for the table itself_, such as, define as _single-inheritance_ if there is __no primary key present__.
+
+The above `Employee` class would be __mapped as single-table inheritance against__ `Person`; the `employee_name` column would be _added as a member_ of the `Person` table.
