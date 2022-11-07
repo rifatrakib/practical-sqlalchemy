@@ -21,3 +21,10 @@ class UserModel(Base, CustomMixin):
 ```
 
 This works because `Base` here __doesn't define any of the variables that `CustomMixin` defines__, i.e. `__tablename__`, `__table_args__`, `id`, etc. __If the `Base` did define an attribute of the same name__, the _class placed first_ in the _inherits list_ would __determine which attribute is used__ on the _newly defined class_.
+
+
+#### Augmenting the Base
+
+In addition to using a _pure mixin_, most of the techniques in this section _can also be applied_ to the `base class` itself, for _patterns_ that should apply to all classes __derived from a particular base__. This is achieved using the _cls argument_ of the `declarative_base()` function.
+
+Where above, `MyModel` and _all other classes_ that __derive from `Base`__ will have a _table name_ __derived from the class name__, an `id` _primary key column_, as well as the `"InnoDB"` _engine for MySQL_.
