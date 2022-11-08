@@ -104,3 +104,10 @@ class ParamRefTargetMixin:
     def target(cls):
         return relationship(Target, primaryjoin=f"Target.id == {cls.__name__}.target_id")
 ```
+
+
+#### Mixing in deferred(), column_property(), and other MapperProperty classes
+
+Like `relationship()`, __all `MapperProperty` subclasses__ such as `deferred()`, `column_property()`, etc. ultimately _involve references to columns_, and therefore, when used with _declarative mixins_, have the `declared_attr` requirement so that __no reliance on copying is needed__.
+
+The `column_property()` or _other construct_ may __refer to other columns from the mixin__. These are __copied ahead of time__ before the `declared_attr` is invoked.
