@@ -151,3 +151,8 @@ class Engineer(Person):
 > ##### Warning
 > 
 > The `declared_attr.cascading` feature __currently does not allow for a subclass to override__ the attribute _with a different function or value_. This is a _current limitation_ in the mechanics of how `@declared_attr` is resolved, and a _warning is emitted_ if this condition is detected. This _limitation_ __does not exist for the special attribute__ names such as `__tablename__`, which __resolve in a different way internally__ than that of `declared_attr.cascading`.
+
+
+#### Combining Table/Mapper Arguments from Multiple Mixins
+
+In the case of `__table_args__` or `__mapper_args__` specified with _declarative mixins_, you may want to _combine some parameters from several mixins_ with those you wish to define on the class itself. The `declared_attr` decorator can be used here to __create user-defined collation routines that pull from multiple collections__.
