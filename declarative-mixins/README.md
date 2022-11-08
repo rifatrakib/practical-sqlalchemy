@@ -122,3 +122,32 @@ This is achieved using the `declared_attr` indicator __in conjunction with a met
 For example, to _create a mixin_ that gives every class a __simple table name based on class name__.
 
 Alternatively, we can modify our `__tablename__` function to return `None` for _subclasses_, using `has_inherited_table()`. This has the _effect of those subclasses_ __being mapped with single table inheritance against the parent__.
+
+
+#### Mixing in Columns in Inheritance Scenarios
+
+In contrast to how `__tablename__` and _other special names_ are handled when used with `declared_attr`, when we _mix in columns and properties_ (e.g. `relationships`, `column properties`, etc.), the __function is invoked for the base class only in the hierarchy__. Below, __only__ the `Person` class will _receive a column called id_; the __mapping will fail__ on `Engineer`, which is _not given a primary key_.
+
+```
+@declarative_mixin
+class HasId:
+    @declared_attr
+    def id(cls):
+        return Column("id", Integer, primary_key=True)
+
+
+class Person(HasId, Base):
+    __tablename__ = "person"
+    discriminator = Column("type", String(50))
+    __mapper_args__ = {"polymorphic_on": discriminator}
+
+
+class Engineer(Person):
+    __tablename__ = "engineer"
+    primary_language = Column(String(50))
+    __mapper_args__ = {"polymorphic_identity": "engineer"}
+```
+
+> ##### Warning
+> 
+> The `declared_attr.cascading` feature __currently does not allow for a subclass to override__ the attribute _with a different function or value_. This is a _current limitation_ in the mechanics of how `@declared_attr` is resolved, and a _warning is emitted_ if this condition is detected. This _limitation_ __does not exist for the special attribute__ names such as `__tablename__`, which __resolve in a different way internally__ than that of `declared_attr.cascading`.
