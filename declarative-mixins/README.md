@@ -111,3 +111,14 @@ class ParamRefTargetMixin:
 Like `relationship()`, __all `MapperProperty` subclasses__ such as `deferred()`, `column_property()`, etc. ultimately _involve references to columns_, and therefore, when used with _declarative mixins_, have the `declared_attr` requirement so that __no reliance on copying is needed__.
 
 The `column_property()` or _other construct_ may __refer to other columns from the mixin__. These are __copied ahead of time__ before the `declared_attr` is invoked.
+
+
+#### Controlling table inheritance with mixins
+
+The `__tablename__` attribute may be used to _provide a function that will determine the name of the table_ used for each class in an __inheritance hierarchy__, as well as whether a class has its _own distinct table_.
+
+This is achieved using the `declared_attr` indicator __in conjunction with a method__ named `__tablename__()`. _Declarative_ will __always invoke__ `declared_attr` for the special names `__tablename__`, `__mapper_args__` and `__table_args__` function _for each mapped class in the hierarchy_, __except if overridden in a subclass__. The function therefore needs to _expect to receive_ __each class individually__ and to _provide_ the __correct answer for each__.
+
+For example, to _create a mixin_ that gives every class a __simple table name based on class name__.
+
+Alternatively, we can modify our `__tablename__` function to return `None` for _subclasses_, using `has_inherited_table()`. This has the _effect of those subclasses_ __being mapped with single table inheritance against the parent__.
