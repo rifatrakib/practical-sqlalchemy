@@ -156,3 +156,25 @@ class Engineer(Person):
 #### Combining Table/Mapper Arguments from Multiple Mixins
 
 In the case of `__table_args__` or `__mapper_args__` specified with _declarative mixins_, you may want to _combine some parameters from several mixins_ with those you wish to define on the class itself. The `declared_attr` decorator can be used here to __create user-defined collation routines that pull from multiple collections__.
+
+
+#### Creating Indexes with Mixins
+
+To define a _named, potentially multicolumn_ `Index` that __applies to all tables derived from a mixin__, use the `"inline"` form of `Index` and establish it as _part of_ `__table_args__`.
+
+```
+@declarative_mixin
+class IndexMixin:
+    a = Column(Integer)
+    b = Column(Integer)
+    
+    @declared_attr
+    def __table_args__(cls):
+        return (Index(f"test_idx_{cls.__tablename__}", "a", "b"), )
+
+
+class MyModel(IndexMixin, Base):
+    __tablename__ = "atable"
+    
+    c = Column(Integer, primary_key=True)
+```
