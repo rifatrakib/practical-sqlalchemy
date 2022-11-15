@@ -30,3 +30,8 @@ An example of a mapping using `@dataclass` using `Declarative with Imperative Ta
 In the above example, the `User.id`, `Address.id`, and `Address.user_id` attributes are defined as `field(init=False)`. This means that _parameters for these_ __won't be added to `__init__()` methods__, but `Session` will still be able to __set them after getting their values during flush__ from _autoincrement_ or _other default value generator_. To allow them to be _specified in the constructor explicitly_, they would instead be __given a default value of None__.
 
 For a `relationship()` to be _declared separately_, it needs to be __specified directly__ within the `mapper.properties` dictionary which itself is specified within the `__mapper_args__` dictionary, so that it is passed to the `mapper()` construction function. An alternative to this approach is in the next example.
+
+
+##### Mapping dataclasses using Declarative Mapping
+
+The _fully declarative approach_ __requires__ that `Column` objects are _declared as class attributes_, which when using _dataclasses_ would __conflict with the dataclass-level attributes__. An approach to _combine these together_ is to __make use of the metadata attribute__ on the `dataclass.field` object, where _SQLAlchemy-specific mapping information may be supplied_. `Declarative` __supports extraction of these parameters__ when the class specifies the attribute `__sa_dataclass_metadata_key__`. This also provides a __more succinct method__ of _indicating the_ `relationship()` _association_.
