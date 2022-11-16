@@ -35,3 +35,8 @@ For a `relationship()` to be _declared separately_, it needs to be __specified d
 ##### Mapping dataclasses using Declarative Mapping
 
 The _fully declarative approach_ __requires__ that `Column` objects are _declared as class attributes_, which when using _dataclasses_ would __conflict with the dataclass-level attributes__. An approach to _combine these together_ is to __make use of the metadata attribute__ on the `dataclass.field` object, where _SQLAlchemy-specific mapping information may be supplied_. `Declarative` __supports extraction of these parameters__ when the class specifies the attribute `__sa_dataclass_metadata_key__`. This also provides a __more succinct method__ of _indicating the_ `relationship()` _association_.
+
+
+##### Mapping dataclasses using Imperative Mapping
+
+As described previously, a class which is set up as a _dataclass_ using the `@dataclass` decorator __can then be further decorated__ using the `registry.mapped()` decorator in order to __apply declarative-style mapping__ to the class. As an __alternative__ to using the `registry.mapped()` decorator, we may also _pass the class through_ the `registry.map_imperatively()` method instead, so that we may pass all `Table` and `mapper()` configuration imperatively to the function rather than having them defined on the class itself as class variables.
