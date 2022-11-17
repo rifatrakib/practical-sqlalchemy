@@ -40,3 +40,10 @@ The _fully declarative approach_ __requires__ that `Column` objects are _declare
 ##### Mapping dataclasses using Imperative Mapping
 
 As described previously, a class which is set up as a _dataclass_ using the `@dataclass` decorator __can then be further decorated__ using the `registry.mapped()` decorator in order to __apply declarative-style mapping__ to the class. As an __alternative__ to using the `registry.mapped()` decorator, we may also _pass the class through_ the `registry.map_imperatively()` method instead, so that we may pass all `Table` and `mapper()` configuration imperatively to the function rather than having them defined on the class itself as class variables.
+
+
+##### Using Declarative Mixins with Dataclasses
+
+In the section `Composing Mapped Hierarchies with Mixins`, _Declarative Mixin_ classes are introduced. One _requirement of declarative mixins_ is that __certain constructs that can't be easily duplicated must be given as `callables`__, using the `declared_attr` decorator, such as in the example at `Mixing in Relationships`.
+
+This form is supported within the _Dataclasses_ `field()` object by using a `lambda` to __indicate the SQLAlchemy construct inside the `field()`__. Using `declared_attr()` to _surround the lambda_ is __optional__. If we wanted to produce our `User` class above where the _ORM fields came from a mixin_ that is itself a `dataclass`, the form would be as follows.
