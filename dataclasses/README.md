@@ -47,3 +47,23 @@ As described previously, a class which is set up as a _dataclass_ using the `@da
 In the section `Composing Mapped Hierarchies with Mixins`, _Declarative Mixin_ classes are introduced. One _requirement of declarative mixins_ is that __certain constructs that can't be easily duplicated must be given as `callables`__, using the `declared_attr` decorator, such as in the example at `Mixing in Relationships`.
 
 This form is supported within the _Dataclasses_ `field()` object by using a `lambda` to __indicate the SQLAlchemy construct inside the `field()`__. Using `declared_attr()` to _surround the lambda_ is __optional__. If we wanted to produce our `User` class above where the _ORM fields came from a mixin_ that is itself a `dataclass`, the form would be as follows.
+
+
+#### Applying ORM mappings to an existing attrs class
+
+The `attrs` library is a _popular third party library_ that __provides similar features__ as `dataclasses`, with _many additional features_ provided __not found__ in ordinary `dataclasses`.
+
+A class augmented with `attrs` uses the `@define` decorator. This decorator initiates a process to __scan the class for attributes that define the class' behavior__, which are then used to __generate methods, documentation, and annotations__.
+
+The _SQLAlchemy ORM_ supports _mapping_ an `attrs` class using `Declarative with Imperative Table` or `Imperative mapping`. The _general form_ of these two styles is __fully equivalent__ to the `Mapping dataclasses using Declarative Mapping` and `Mapping dataclasses using Declarative With Imperative Table` mapping forms used with `dataclasses`, where the _inline attribute directives_ used by `dataclasses` or `attrs` are __unchanged__, and _SQLAlchemy_'s `table-oriented instrumentation` is __applied at runtime__.
+
+The `@define` decorator of `attrs` _by default_ __replaces the annotated class__ with a _new_ `__slots__` _based class_, which is __not supported__. When using the _old style annotation_ `@attr.s` or using `define(slots=False)`, the class __does not get replaced__. Furthermore `attrs` __removes its own class-bound attributes after the decorator runs__, so that _SQLAlchemy's mapping process_ __takes over__ these attributes without any issue. _Both decorators_, `@attr.s` and `@define(slots=False)` __work with `SQLAlchemy`__.
+
+
+##### Mapping attrs with Declarative "Imperative Table"
+
+In the `"Declarative with Imperative Table"` style, a `Table` object is __declared inline__ with the _declarative class_. The `@define` decorator is __applied to the class first__, then the `registry.mapped()` decorator __second__.
+
+> ##### Note
+> 
+> The `attrs` `slots=True` option, which enables `__slots__` on a _mapped class_, __cannot be used__ with _SQLAlchemy mappings_ __without fully implementing alternative attribute instrumentation__, as _mapped classes_ __normally rely upon direct access to__ `__dict__` for _state storage_. Behavior is _undefined_ when _this option_ is __present__.
