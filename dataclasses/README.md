@@ -67,3 +67,8 @@ In the `"Declarative with Imperative Table"` style, a `Table` object is __declar
 > ##### Note
 > 
 > The `attrs` `slots=True` option, which enables `__slots__` on a _mapped class_, __cannot be used__ with _SQLAlchemy mappings_ __without fully implementing alternative attribute instrumentation__, as _mapped classes_ __normally rely upon direct access to__ `__dict__` for _state storage_. Behavior is _undefined_ when _this option_ is __present__.
+
+
+##### Mapping attrs with Imperative Mapping
+
+Just as is the case with `dataclasses`, we can make use of `registry.map_imperatively()` to __map an existing `attrs` class__ as well.
