@@ -22,3 +22,12 @@ Where above `User.id` resolves to a column named `user_id` and `User.name` resol
 When _mapping to an existing table_, the `Column` object __can be referenced directly__.
 
 The corresponding technique for an _imperative mapping_ is to __place the desired key__ in the `mapper.properties` dictionary with the desired key.
+
+
+#### Automating Column Naming Schemes from Reflected Tables
+
+In the previous section `Naming Columns Distinctly from Attribute Names`, we showed how a `Column` __explicitly mapped__ to a class can have a _different attribute name_ than the column. But what if we aren't listing out `Column` objects _explicitly_, and instead are _automating_ the production of `Table` objects using __reflection__ (i.e. as described in `Reflecting Database Objects`)? In this case we can make use of the `DDLEvents.column_reflect()` event to __intercept the production of `Column` objects__ and provide them with the `Column.key` of our choice. The event is __most easily associated__ with the `MetaData` object that's in use, such as below we use the one linked to the `declarative_base` instance.
+
+With the above _event_, the _reflection_ of `Column` objects will be __intercepted with our event__ that _adds_ a new `".key"` element, such as in a mapping as below.
+
+The approach also works with both the `DeferredReflection` base class as well as with the `Automap extension`. _For automap specifically_, see the section `Intercepting Column Definitions` for background.
