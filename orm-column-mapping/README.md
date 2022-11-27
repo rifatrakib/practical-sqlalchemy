@@ -31,3 +31,12 @@ In the previous section `Naming Columns Distinctly from Attribute Names`, we sho
 With the above _event_, the _reflection_ of `Column` objects will be __intercepted with our event__ that _adds_ a new `".key"` element, such as in a mapping as below.
 
 The approach also works with both the `DeferredReflection` base class as well as with the `Automap extension`. _For automap specifically_, see the section `Intercepting Column Definitions` for background.
+
+
+#### Using column_property for column level options
+
+_Options_ can be specified when mapping a `Column` using the `column_property()` function. This function __explicitly creates the `ColumnProperty`__ used by the `mapper()` to __keep track of the `Column`__; normally, the `mapper()` creates this __automatically__. Using `column_property()`, we can _pass additional arguments_ about how we'd like the `Column` to be mapped. Below, we pass an option *active_history*, which specifies that a change to this column's value should result in the former value being loaded first.
+
+`column_property()` is also used to __map a single attribute to multiple columns__. This use case arises when _mapping to_ a `join()` which has attributes which are equated to each other.
+
+Another place where `column_property()` is needed is to __specify SQL expressions as mapped attributes__, such as below where we _create an attribute_ fullname that is the _string concatenation_ of the `firstname` and `lastname` columns.
