@@ -53,3 +53,32 @@ In those cases where the _selectable being mapped_ __does not include columns__ 
 Given the following example of a `Imperative Table` mapping against an existing `Table` object, as would occur in a scenario such as when the `Table` were __reflected from an existing database__, where the _table does not have any declared primary key_, we may map such a table as in the following example.
 
 Above, the `group_users` table is an _association table_ of some kind with string columns `user_id` and `group_id`, but __no primary key__ is set up; instead, there is only a `UniqueConstraint` establishing that the _two columns represent a unique key_. The `Mapper` __does not automatically inspect unique constraints for primary keys__; instead, we make use of the `mapper.primary_key` parameter, passing a _collection_ of `[group_users.c.user_id, group_users.c.group_id]`, indicating that these _two columns should be used_ in order to __construct the identity key__ for instances of the `GroupUsers` class.
+
+
+#### Mapping a Subset of Table Columns
+
+Sometimes, a `Table` object was _made available_ using the __reflection process__ described at `Reflecting Database Objects` to _load the table's structure from the database_. For such a table that has lots of columns that don't need to be referenced in the application, the `include_properties` or `exclude_properties` arguments _can specify_ that __only a subset of columns should be mapped__.
+
+```
+class User(Base):
+    __table__ = user_table
+    __mapper_args__ = {"include_properties": ["id", "user_name"]}
+```
+
+...will map the `User` class to the `user_table` table, only including the `id` and `user_name` columns - the rest are not referenced. Similarly:
+
+```
+class Address(Base):
+    __table__ = address_table
+    __mapper_args__ = {"exclude_properties": ["street", "city", "state", "zip"]}
+```
+
+...will map the `Address` class to the `address_table` table, including all columns present except street, city, state, and zip.
+
+When this mapping is used, the _columns that are not included_ __will not be referenced__ in any `SELECT` statements _emitted by_ `Query`, __nor__ will there be _any mapped attribute_ on the mapped class which represents the column; _assigning an attribute of that name_ will __have no effect__ beyond that of a normal Python attribute assignment.
+
+In some cases, _multiple columns may have the same name_, such as when __mapping to a join of two or more tables__ that share some column name. `include_properties` and `exclude_properties` can also accommodate `Column` objects to __more accurately describe which columns should be included or excluded__.
+
+> ##### Note
+> 
+> `insert` and `update` defaults configured on individual `Column` objects, i.e. those described at Column `INSERT/UPDATE Defaults` including those configured by the `Column.default`, `Column.onupdate`, `Column.server_default` and `Column.server_onupdate` parameters, will __continue to function normally__ even if those `Column` objects are _not mapped_. This is because in the case of `Column.default` and `Column.onupdate`, the `Column` object is __still present on the underlying `Table`__, thus _allowing the default functions_ to take place when the __ORM emits__ an `INSERT` or `UPDATE`, and in the case of `Column.server_default` and `Column.server_onupdate`, the __relational database itself emits__ these defaults as a `server side behavior`.
