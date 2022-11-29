@@ -95,3 +95,10 @@ When the `File` class is used in expressions normally, the attributes assigned t
 ```
 q = session.query(File.path).filter(File.filename == "foo.txt")
 ```
+
+
+#### Using a plain descriptor
+
+In cases where an SQL query more elaborate than what `column_property()` or `hybrid_property` can provide must be emitted, a __regular Python function accessed as an attribute__ can be used, assuming the expression __only needs to be available__ on an _already-loaded instance_. The function is decorated with Python's own `@property` decorator __to mark it as a read-only attribute__. Within the function, `object_session()` is used to _locate_ the `Session` corresponding to the current object, which is then used to emit a query.
+
+The _plain descriptor approach_ is useful as a __last resort__, but is __less performant__ in the usual case than _both the hybrid and column property approaches_, in that it needs to emit a SQL query upon each access.
