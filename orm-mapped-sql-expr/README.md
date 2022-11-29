@@ -102,3 +102,70 @@ q = session.query(File.path).filter(File.filename == "foo.txt")
 In cases where an SQL query more elaborate than what `column_property()` or `hybrid_property` can provide must be emitted, a __regular Python function accessed as an attribute__ can be used, assuming the expression __only needs to be available__ on an _already-loaded instance_. The function is decorated with Python's own `@property` decorator __to mark it as a read-only attribute__. Within the function, `object_session()` is used to _locate_ the `Session` corresponding to the current object, which is then used to emit a query.
 
 The _plain descriptor approach_ is useful as a __last resort__, but is __less performant__ in the usual case than _both the hybrid and column property approaches_, in that it needs to emit a SQL query upon each access.
+
+
+#### Query-time SQL expressions as mapped attributes
+
+When using `Session.query()`, we have the __option to specify__ _not just mapped entities_ but _ad-hoc SQL expressions_ as well. Suppose if a `class A` had _integer_ attributes `.x` and `.y`, we could query for A objects, and additionally the _sum of .x and .y_, as follows
+
+```
+q = session.query(A, A.x + A.y)
+```
+
+The above query returns tuples of the form (`A object`, `integer`).
+
+An option exists which can apply the _ad-hoc_ `A.x + A.y` _expression_ to the returned A objects instead of as a separate tuple entry; this is the `with_expression()` query option in conjunction with the `query_expression()` attribute mapping. The class is __mapped to include a placeholder attribute__ where any particular SQL expression may be applied.
+
+We can then query for objects of type `A`, applying an _arbitrary SQL expression_ to be populated into `A.expr`.
+
+```
+q = session.query(A).options(with_expression(A.expr, A.x + A.y))
+```
+
+The `query_expression()` mapping has these caveats:
+
+* On an object where `query_expression()` were _not used to populate the attribute_, the attribute on an object instance will have the value `None`, unless the `query_expression.default_expr` parameter is set to an alternate SQL expression.
+
+* The `query_expression` value __does not populate on an object that is already loaded__. That is, this will not work:
+
+    ```
+    obj = session.query(A).first()
+    obj = session.query(A).options(with_expression(A.expr, some_expr)).first()
+    ```
+
+To ensure the attribute is _re-loaded_, use `Query.populate_existing()`:
+
+    ```
+    obj = (
+        session.query(A)
+        .populate_existing()
+        .options(with_expression(A.expr, some_expr))
+        .first()
+    )
+    ```
+
+* The `query_expression` value __does not refresh when the object is expired__. Once the object is expired, either via `Session.expire()` or via the `expire_on_commit` behavior of `Session.commit()`, the _value is removed from the attribute_ and will _return None_ on subsequent access. Only by running a _new_ `Query` that touches the object which includes a new `with_expression()` directive will the attribute be set to a _non-None value_.
+
+* The mapped attribute currently __cannot be applied to other parts of the query__, such as the `WHERE` clause, the `ORDER BY` clause, and make use of the _ad-hoc expression_; that is, this won't work:
+
+    ```
+    # won't work
+    q = (
+        session.query(A)
+        .options(with_expression(A.expr, A.x + A.y))
+        .filter(A.expr > 5)
+        .order_by(A.expr)
+    )
+    ```
+
+The `A.expr` expression will resolve to `NULL` in the above `WHERE` clause and `ORDER BY` clause. To use the expression throughout the query, assign to a variable and use that:
+
+    ```
+    a_expr = A.x + A.y
+    q = (
+        session.query(A)
+        .options(with_expression(A.expr, a_expr))
+        .filter(a_expr > 5)
+        .order_by(a_expr)
+    )
+    ```
