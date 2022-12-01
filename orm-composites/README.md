@@ -99,3 +99,52 @@ class Vertex(Base):
     start = composite(Point, x1, y1, comparator_factory=PointComparator)
     end = composite(Point, x2, y2, comparator_factory=PointComparator)
 ```
+
+
+#### Nesting Composites
+
+_Composite objects_ can be defined to work in _simple nested schemes_, by __redefining behaviors within the composite class__ to work as desired, then _mapping the composite class_ to the _full length of individual columns_ normally. Typically, it is convenient to _define separate constructors for user-defined use and generate-from-row use_. Below we reorganize the `Vertex` class to itself be a _composite object_, which is then mapped to a class `HasVertex`.
+
+```
+class Vertex:
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+    
+    @classmethod
+    def _generate(cls, x1, y1, x2, y2):
+        """generate a Vertex from a row"""
+        return Vertex(Point(x1, x2), Point(x2, y2))
+    
+    def __composite_values__(self):
+        return self.start.__composite_values__() + self.end.__composite_values__()
+
+
+class HasVertex(Base):
+    __tablename__ = "has_vertex"
+    
+    id = Column(Integer, primary_key=True)
+    x1 = Column(Integer)
+    y1 = Column(Integer)
+    x2 = Column(Integer)
+    y2 = Column(Integer)
+    
+    vertex = composite(Vertex._generate, x1, y1, x2, y2)
+```
+
+We can then use the above mapping as:
+
+```
+hv = HasVertex(vertex=Vertex(Point(1, 2), Point(3, 4)))
+
+s.add(hv)
+s.commit()
+
+hv = (
+    s.query(HasVertex)
+    .filter(HasVertex.vertex == Vertex(Point(1, 2), Point(3, 4)))
+    .first()
+)
+print(hv.vertex.start)
+print(hv.vertex.end)
+```
