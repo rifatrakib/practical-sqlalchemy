@@ -62,3 +62,40 @@ session.add(v)
 q = session.query(Vertex).filter(Vertex.start == Point(3, 4))
 print(q.first().start)
 ```
+
+
+#### Tracking In-Place Mutations on Composites
+
+_In-place changes_ to an _existing composite value_ are __not tracked automatically__. Instead, the _composite class_ needs to _provide events_ to its parent object __explicitly__. This task is _largely automated_ via the usage of the `MutableComposite` mixin, which _uses events to associate each user-defined composite object with all parent associations_.
+
+
+#### Redefining Comparison Operations for Composites
+
+The `"equals"` comparison operation _by default_ produces an __AND__ of all corresponding columns equated to one another. This can be changed using the `comparator_factory` argument to `composite()`, where we specify a _custom_ `Comparator` class to __define existing or new operations__. Below we illustrate the `"greater than"` operator, implementing the same expression that the base `"greater than"` does.
+
+```
+class PointComparator(CompositeProperty.Comparator):
+    def __gt__(self, other):
+        """redefine the 'greater than' operation"""
+        return sql.and_(
+            *[
+                a > b for a, b in zip(
+                    self.__clause_element__().clauses,
+                    other.__composite_values__(),
+                )
+            ]
+        )
+
+
+class Vertex(Base):
+    __tablename__ = "vertices"
+    
+    id = Column(Integer, primary_key=True)
+    x1 = Column(Integer)
+    y1 = Column(Integer)
+    x2 = Column(Integer)
+    y2 = Column(Integer)
+    
+    start = composite(Point, x1, y1, comparator_factory=PointComparator)
+    end = composite(Point, x2, y2, comparator_factory=PointComparator)
+```
