@@ -47,3 +47,105 @@ sqladdress = (
     filter(EmailAddressPropertyExpression.email == "address").one()
 )
 ```
+
+
+#### Synonyms
+
+_Synonyms_ are a __mapper-level construct__ that allow any attribute on a class to `"mirror"` another attribute that is mapped. In the most basic sense, the _synonym_ is an _easy way_ to __make a certain attribute available__ by an _additional name_.
+
+```
+class JobStatus(Base):
+    __tablename__ = "my_table"
+    
+    id = Column(Integer, primary_key=True)
+    job_status = Column(String(50))
+    
+    status = synonym("job_status")
+```
+
+The above class `JobStatus` has _two attributes_, `.job_status` and `.status` that will __behave as one attribute__, both at the _expression level_:
+
+```
+print(JobStatus.job_status == "some_status")
+print(JobStatus.status == "some_status")
+```
+
+and at the instance level:
+
+```
+m1 = JobStatus(status="x")
+m1.status, m1.job_status
+
+m1.job_status = "y"
+m1.status, m1.job_status
+```
+
+The `synonym()` can be used for _any kind of mapped attribute that subclasses_ `MapperProperty`, including _mapped columns_ and _relationships_, as well as _synonyms themselves_.
+
+Beyond a simple mirror, `synonym()` can also be made to __reference a user-defined descriptor__. We can supply our `status` synonym with a `@property`.
+
+```
+class StatusProperty(Base):
+    __tablename__ = "status_property"
+    
+    id = Column(Integer, primary_key=True)
+    status = Column(String(50))
+    
+    @property
+    def job_status(self):
+        return f"Status: {self.status}"
+    
+    job_status = synonym("status", descriptor=job_status)
+```
+
+When using _Declarative_, the above pattern __can be expressed more succinctly__ using the `synonym_for()` decorator.
+
+While the `synonym()` is _useful for simple mirroring_, the use case of _augmenting attribute behavior with descriptors_ is _better handled_ in modern usage using the __hybrid attribute feature__, which is more oriented towards Python descriptors. Technically, a `synonym()` can do everything that a `hybrid_property` can do, as it also supports injection of custom SQL capabilities, but the `hybrid` is __more straightforward__ to use in more complex situations.
+
+
+##### map_column
+
+__For classical mappings and mappings against an existing Table object only__, if `True`, the `synonym()` construct will _locate_ the `Column` object upon the _mapped table_ that would _normally be associated with the attribute name_ of this synonym, and produce a _new_ `ColumnProperty` that instead maps this `Column` to the alternate name given as the _"name"_ argument of the `synonym`; in this way, the usual step of _redefining the mapping_ of the `Column` to be _under a different name_ is __unnecessary__. This is usually intended to be used when a `Column` is to be _replaced with an attribute that also uses a descriptor_, that is, in conjunction with the `synonym.descriptor` parameter.
+
+```
+mapped_table = Table(
+    "mapped_table",
+    Base.metadata,
+    Column("id", Integer, primary_key=True),
+    Column("job_status", String(50))
+)
+
+
+class MappedTable:
+    @property
+    def _job_status_descriptor(self):
+        return f"Status: {self._job_status}"
+
+
+mapper.map_imperatively(
+    MappedTable, mapped_table,
+    properties={
+        "job_status": synonym(
+            "_job_status", map_column=True,
+            descriptor=MappedTable._job_status_descriptor,
+        )
+    }
+)
+```
+
+Above, the attribute named `_job_status` is __automatically mapped__ to the *job_status* column:
+
+```
+j1 = MappedTable()
+j1._job_status = "employed"
+j1.job_status
+```
+
+When using _Declarative_, in order to _provide a descriptor in conjunction with a synonym_, use the `sqlalchemy.ext.declarative.synonym_for()` helper. However, note that the _hybrid properties feature_ should usually be __preferred__, particularly when _redefining attribute behavior_.
+
+
+#### Operator Customization
+
+The `"operators"` used by the _SQLAlchemy ORM_ and _Core expression language_ are __fully customizable__. For example, the comparison expression `User.name == "ed"` makes usage of an operator built into Python itself called `operator.eq` - __the actual SQL construct which SQLAlchemy associates with such an operator can be modified__. New operations can be associated with column expressions as well. The operators which take place for column expressions are most directly redefined at the type level.
+
+_ORM level functions_ like `column_property()`, `relationship()`, and `composite()` also provide for __operator redefinition__ at the ORM level, by passing a `PropComparator` subclass to the `comparator_factory` argument of each function. Customization of operators at this level is a rare use case.
