@@ -110,3 +110,235 @@ Above, the _Manager_ class will have a _Manager.company_ attribute; _Company_ wi
 ##### Loading Joined Inheritance Mappings
 
 See the sections `Loading Inheritance Hierarchies` and `Loading objects with joined table inheritance` for background on _inheritance loading techniques_, including _configuration_ of tables to be queried both at _mapper configuration time_ as well as _query time_.
+
+
+#### Single Table Inheritance
+
+`Single table inheritance` represents _all attributes of all subclasses_ __within a single table__. A particular _subclass_ that has __attributes unique to that class__ will _persist them within columns_ in the table that are otherwise `NULL` if the row refers to a different kind of object.
+
+__Querying__ for a particular _subclass_ in the hierarchy will render as a `SELECT` _against the base table_, which will include a `WHERE` clause that _limits rows_ to those with a particular value or values present in the __discriminator column or expression__.
+
+`Single table inheritance` has the __advantage of simplicity__ compared to _joined table inheritance_; _queries_ are __much more efficient__ as only one table needs to be involved in order to load objects of every represented class.
+
+_Single table inheritance configuration_ looks much like `joined-table inheritance`, except only the _base class_ specifies `__tablename__`. A _discriminator column_ is also __required on the base table__ so that _classes can be differentiated from each other_.
+
+Even though _subclasses share the base table for all of their attributes_, when using _Declarative_, `Column` objects __may still be specified on subclasses__, indicating that the _column_ is to be __mapped only to that subclass__; the `Column` will be applied to the __same base `Table` object__.
+
+```
+class Employee(Base):
+    __tablename__ = "employee"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    type = Column(String(20))
+    
+    __mapper_args__ = {
+        "polymorphic_on": type,
+        "polymorphic_identity": "employee",
+    }
+
+
+class Manager(Employee):
+    manager_data = Column(String(50))
+    
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+    }
+
+
+class Engineer(Employee):
+    engineer_data = Column(String(50))
+    
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+    }
+```
+
+Note that the _mappers for the derived classes_ `Manager` and `Engineer` __omit the `__tablename__`__, indicating they __do not have a mapped table of their own__.
+
+
+##### Resolving Column Conflicts
+
+Note in the previous section that the *manager_name* and *engineer_info* columns are __"moved up"__ to be applied to `Employee.__table__`, as a result of their _declaration on a subclass that has no table of its own_. A _tricky case_ comes up when _two subclasses want to specify the same column_.
+
+```
+class Manager(Employee):
+    manager_data = Column(String(50))
+    start_date = Column(DateTime)
+    
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+    }
+
+
+class Engineer(Employee):
+    engineer_data = Column(String(50))
+    start_date = Column(DateTime)
+    
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+    }
+```
+
+Above, the `start_date` column declared on both _Engineer_ and _Manager_ will result in an error:
+
+```
+sqlalchemy.exc.ArgumentError: Column 'start_date' on class
+<class '__main__.Manager'> conflicts with existing
+column 'employee.start_date'
+```
+
+The above scenario presents an _ambiguity_ to the _Declarative mapping system_ that may be __resolved__ by using `declared_attr` to __define the `Column` conditionally__, taking care to return the existing column via the parent `__table__` if it already exists.
+
+```
+class Manager(Employee):
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+    }
+    
+    @declared_attr
+    def start_date(cls):
+        """Start date column, if not present already"""
+        return Employee.__table__.c.get("start_date", Column(DateTime))
+
+
+class Engineer(Employee):
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+    }
+    
+    @declared_attr
+    def start_date(cls):
+        """Start date column, if not present already"""
+        return Employee.__table__.c.get("start_date", Column(DateTime))
+```
+
+Above, when _Manager_ is mapped, the `start_date` column is _already present_ on the _Employee_ class; by returning the existing Column object, the _declarative system_ recognizes that this is the __same column to be mapped to the two different subclasses separately__.
+
+A _similar concept_ can be used with _mixin classes_ (see `Composing Mapped Hierarchies with Mixins`) to define a _particular series of columns and/or other mapped attributes_ from a __reusable mixin class__.
+
+```
+class Employee(Base):
+    __tablename__ = "employee"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    type = Column(String(20))
+
+    __mapper_args__ = {
+        "polymorphic_on": type,
+        "polymorphic_identity": "employee",
+    }
+
+
+class HasStartDate:
+    @declared_attr
+    def start_date(cls):
+        return cls.__table__.c.get("start_date", Column(DateTime))
+
+
+class Engineer(HasStartDate, Employee):
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+    }
+
+
+class Manager(HasStartDate, Employee):
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+    }
+```
+
+
+##### Relationships with Single Table Inheritance
+
+_Relationships_ are __fully supported__ with `single table inheritance`. _Configuration_ is done in the __same manner__ as that of `joined inheritance`; a _foreign key attribute_ should be __on the same class__ that's the __"foreign" side of the relationship__.
+
+```
+class Company(Base):
+    __tablename__ = "company"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    employees = relationship("Employee", back_populates="company")
+
+
+class Employee(Base):
+    __tablename__ = "employee"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    type = Column(String(50))
+
+    company_id = Column(ForeignKey("company.id"))
+    company = relationship("Company", back_populates="employees")
+
+    __mapper_args__ = {
+        "polymorphic_identity": "employee",
+        "polymorphic_on": type,
+    }
+
+
+class Manager(Employee):
+    manager_data = Column(String(50))
+
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+    }
+
+
+class Engineer(Employee):
+    engineer_info = Column(String(50))
+
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+    }
+```
+
+Also, like the case of _joined inheritance_, we can create `relationships` that involve a specific subclass. When queried, the `SELECT` statement will include a `WHERE` clause that __limits the class selection to that subclass or subclasses__.
+
+```
+class Company(Base):
+    __tablename__ = "company"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    managers = relationship("Manager", back_populates="company")
+
+
+class Employee(Base):
+    __tablename__ = "employee"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    type = Column(String(50))
+
+    __mapper_args__ = {
+        "polymorphic_identity": "employee",
+        "polymorphic_on": type,
+    }
+
+
+class Manager(Employee):
+    manager_name = Column(String(30))
+
+    company_id = Column(ForeignKey("company.id"))
+    company = relationship("Company", back_populates="managers")
+
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+    }
+
+
+class Engineer(Employee):
+    engineer_info = Column(String(50))
+
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+    }
+```
+
+Above, the _Manager_ class will have a `Manager.company` attribute; _Company_ will have a `Company.managers` attribute that __always loads against the employee__ with an _additional_ `WHERE` clause that __limits rows__ to those with `type = 'manager'`.
+
+
+##### Loading Single Inheritance Mappings
+
+The _loading techniques_ for `single-table inheritance` are __mostly identical__ to those used for _joined-table inheritance_, and a _high degree of abstraction_ is provided between these two mapping types such that it is __easy to switch__ between them as well as to __intermix__ them in a _single hierarchy_ (just __omit `__tablename__` from whichever subclasses are to be single-inheriting__). See the sections `Loading Inheritance Hierarchies` and `Loading objects with single table inheritance` for documentation on inheritance loading techniques, including configuration of classes to be queried both at mapper configuration time as well as query time.
