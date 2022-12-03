@@ -342,3 +342,171 @@ Above, the _Manager_ class will have a `Manager.company` attribute; _Company_ wi
 ##### Loading Single Inheritance Mappings
 
 The _loading techniques_ for `single-table inheritance` are __mostly identical__ to those used for _joined-table inheritance_, and a _high degree of abstraction_ is provided between these two mapping types such that it is __easy to switch__ between them as well as to __intermix__ them in a _single hierarchy_ (just __omit `__tablename__` from whichever subclasses are to be single-inheriting__). See the sections `Loading Inheritance Hierarchies` and `Loading objects with single table inheritance` for documentation on inheritance loading techniques, including configuration of classes to be queried both at mapper configuration time as well as query time.
+
+
+#### Concrete Table Inheritance
+
+`Concrete inheritance` __maps each subclass to its own distinct table__, each of which contains __all columns necessary__ to produce an instance of that class. A _concrete inheritance configuration_ by default __queries non-polymorphically__; a query for a particular class will only query that class' table and only return instances of that class. _Polymorphic loading of concrete classes_ is enabled by __configuring within the mapper__ a _special_ `SELECT` that typically is produced as a `UNION` of _all the tables_.
+
+> ##### Warning
+>
+> _Concrete table inheritance_ is __much more complicated__ than _joined or single table inheritance_, and is __much more limited in functionality__ especially pertaining to _using it with relationships_, `eager loading`, and `polymorphic loading`. When used _polymorphically_ it produces _very large queries with UNIONS_ that __won't perform as well as simple joins__. It is strongly advised that if _flexibility_ in `relationship loading` and `polymorphic loading` is required, that _joined or single table inheritance_ be used if at all possible. If `polymorphic loading` isn't required, then _plain non-inheriting mappings_ can be used if each class refers to its own table completely.
+
+Whereas _joined and single table inheritance_ are __fluent__ in `"polymorphic" loading`, it is a _more awkward affair_ in `concrete inheritance`. For this reason, _concrete inheritance_ is __more appropriate__ when __polymorphic loading is not required__. Establishing relationships that involve concrete inheritance classes is also more awkward.
+
+To establish a class as using _concrete inheritance_, add the `mapper.concrete` parameter within the `__mapper_args__`. This indicates to _Declarative_ as well as the mapping that the _superclass table_ __should not be considered as part of the mapping__.
+
+_Two critical points_ should be noted:
+
+* We must __define all columns explicitly__ on _each subclass_, even those of the same name. A column such as `Employee.name` here is __not copied out__ to the tables mapped by _Manager_ or _Engineer_ for us.
+
+* while the _Engineer_ and _Manager_ classes are _mapped in an inheritance relationship_ with _Employee_, they still __do not include polymorphic loading__. Meaning, if we query for _Employee_ objects, the _manager_ and _engineer_ tables are __not queried at all__.
+
+
+##### Concrete Polymorphic Loading Configuration
+
+_Polymorphic loading with concrete inheritance_ requires that a _specialized_ `SELECT` is __configured against each base class that should have polymorphic loading__. This `SELECT` needs to be __capable of accessing all the mapped tables individually__, and is typically a `UNION` statement that is constructed using a SQLAlchemy helper `polymorphic_union()`.
+
+As discussed in `Loading Inheritance Hierarchies`, _mapper inheritance configurations_ of any type __can be configured__ to _load from a special selectable_ by default using the `mapper.with_polymorphic` argument. Current public API requires that this argument is set on a _Mapper_ when it is first constructed.
+
+However, in the case of _Declarative_, both the _mapper_ and the _Table that is mapped_ are __created at once__, the moment the mapped class is defined. This means that the `mapper.with_polymorphic` argument __cannot be provided yet__, since the _Table_ objects that correspond to the subclasses _haven't yet been defined_.
+
+There are a few strategies available to resolve this cycle, however _Declarative_ provides _helper classes_ `ConcreteBase` and `AbstractConcreteBase` which handle this issue behind the scenes.
+
+Using `ConcreteBase`, we can set up our concrete mapping in almost the same way as we do other forms of inheritance mappings.
+
+Above, _Declarative_ sets up the __polymorphic selectable__ for the _Employee_ class at __mapper `"initialization"` time__; this is the _late-configuration step_ for mappers that __resolves__ other _dependent mappers_. The `ConcreteBase` helper uses the `polymorphic_union()` function to _create a UNION of all concrete-mapped tables_ after all the other classes are set up, and then _configures_ this statement with the __already existing base-class mapper__.
+
+Upon _select_, the `polymorphic union` produces a query like this:
+
+```
+session.query(Employee).all()
+
+SELECT
+    pjoin.id AS pjoin_id,
+    pjoin.name AS pjoin_name,
+    pjoin.type AS pjoin_type,
+    pjoin.manager_data AS pjoin_manager_data,
+    pjoin.engineer_info AS pjoin_engineer_info
+FROM (
+    SELECT
+        employee.id AS id,
+        employee.name AS name,
+        CAST(NULL AS VARCHAR(50)) AS manager_data,
+        CAST(NULL AS VARCHAR(50)) AS engineer_info,
+        'employee' AS type
+    FROM employee
+    UNION ALL
+    SELECT
+        manager.id AS id,
+        manager.name AS name,
+        manager.manager_data AS manager_data,
+        CAST(NULL AS VARCHAR(50)) AS engineer_info,
+        'manager' AS type
+    FROM manager
+    UNION ALL
+    SELECT
+        engineer.id AS id,
+        engineer.name AS name,
+        CAST(NULL AS VARCHAR(50)) AS manager_data,
+        engineer.engineer_info AS engineer_info,
+        'engineer' AS type
+    FROM engineer
+) AS pjoin
+```
+
+The above _UNION_ query needs to manufacture `"NULL"` columns for _each subtable_ in order to __accommodate for those columns__ that _aren't members of that particular subclass_.
+
+
+##### Abstract Concrete Classes
+
+The _concrete mappings_ illustrated thus far show both the _subclasses_ as well as the _base class_ mapped to individual tables. In the _concrete inheritance_ use case, it is __common__ that the __base class is not represented within the database, only the subclasses__. In other words, the _base class_ is `"abstract"`.
+
+Normally, when one would like to _map two different subclasses to individual tables_, and __leave the base class unmapped__, this can be achieved very easily. When using _Declarative_, just declare the base class with the `__abstract__` indicator.
+
+Above, we are __not actually__ making use of SQLAlchemy's inheritance mapping facilities; we can _load and persist_ instances of _AbstractManager_ and _AbstractEngineer_ normally. The situation changes however when we need to _query polymorphically_, that is, we'd like to _emit_ `session.query(AbstractEmployee)` and get back a _collection of AbstractManager and AbstractEngineer instances_. This brings us back into the domain of _concrete inheritance_, and we must __build a special mapper__ against _AbstractEmployee_ in order to achieve this.
+
+To modify our _concrete inheritance_ example to illustrate an `"abstract" base` that is capable of _polymorphic loading_, we will have only an _engineer_ and a _manager_ table and __no employee table__, however the _AbstractEmployee_ mapper will be __mapped directly to the "polymorphic union"__, rather than specifying it locally to the `mapper.with_polymorphic` parameter.
+
+To help with this, _Declarative_ offers a variant of the `ConcreteBase` class called `AbstractConcreteBase` which achieves this __automatically__.
+
+Above, the `registry.configure()` method is invoked, which will __trigger__ the _Employee_ class to be __actually mapped__; _before the configuration step_, the class has __no mapping__ as the _sub-tables_ which it will query from __have not yet been defined__. This process is __more complex__ than that of _ConcreteBase_, in that the __entire mapping of the base class must be delayed until all the subclasses have been declared__. With a mapping like the above, only instances of _Manager_ and _Engineer_ __may be persisted__; _querying against the Employee_ class will __always produce__ _Manager_ and _Engineer_ objects.
+
+
+##### Classical and Semi-Classical Concrete Polymorphic Configuration
+
+The _Declarative configurations_ illustrated with `ConcreteBase` and `AbstractConcreteBase` are _equivalent to two other forms of configuration_ that __make use of `polymorphic_union()` explicitly__. These configurational forms _make use of_ the `Table` object __explicitly__ so that the `"polymorphic union"` can be __created first, then applied to the mappings__. These are illustrated here to clarify the role of the `polymorphic_union()` function in terms of mapping.
+
+A _semi-classical mapping_ for example makes use of _Declarative_, but __establishes the `Table` objects separately__.
+
+Next, the _UNION_ is produced using `polymorphic_union()`.
+
+```
+pjoin = polymorphic_union(
+    {
+        "employee": employees_table,
+        "manager": managers_table,
+        "engineer": engineers_table,
+    },
+    "type",
+    "pjoin",
+)
+```
+
+With the above `Table` objects, the _mappings_ can be produced using `"semi-classical" style`, where we use _Declarative_ in conjunction with the `__table__` argument; our _polymorphic union_ above is passed via `__mapper_args__` to the `mapper.with_polymorphic` parameter.
+
+Alternatively, the same `Table` objects can be used in __fully `"classical"` style__, without using _Declarative_ at all. A constructor similar to that supplied by _Declarative_ is illustrated.
+
+```
+pjoin = polymorphic_union(
+    {
+        "manager": managers_table,
+        "engineer": engineers_table,
+    },
+    "type",
+    "pjoin",
+)
+
+
+class Employee(Base):
+    __table__ = pjoin
+    __mapper_args__ = {
+        "polymorphic_on": pjoin.c.type,
+        "with_polymorphic": "*",
+        "polymorphic_identity": "employee",
+    }
+
+
+class Engineer(Employee):
+    __table__ = engineer_table
+    __mapper_args__ = {
+        "polymorphic_identity": "engineer",
+        "concrete": True,
+    }
+
+
+class Manager(Employee):
+    __table__ = manager_table
+    __mapper_args__ = {
+        "polymorphic_identity": "manager",
+        "concrete": True,
+    }
+```
+
+Above, we use `polymorphic_union()` in the same manner as before, except that we __omit the employee table__.
+
+
+##### Relationships with Concrete Inheritance
+
+In a _concrete inheritance_ scenario, _mapping relationships_ is `challenging` since the __distinct classes do not share a table__. If the relationships only involve specific classes, such as a relationship between _Company_ in our previous examples and _Manager_, special steps aren't needed as these are just two related tables.
+
+However, if _Company_ is to have a `one-to-many relationship` to _Employee_, indicating that the collection may include both _Engineer_ and _Manager_ objects, that implies that _Employee_ __must have polymorphic loading capabilities__ and also that __each table to be related must have a foreign key back to the company table__. An example of such a configuration is as follows.
+
+The next complexity with _concrete inheritance_ and _relationships_ involves when we'd like _one or all_ of `Employee`, `Manager` and `Engineer` to themselves __refer back to `Company`__. For this case, SQLAlchemy has __special behavior__ in that a `relationship()` placed on _Employee_ which __links to__ _Company_ __does not work against the `Manager` and `Engineer` classes__, when _exercised_ at the _instance level_. Instead, a __distinct__ `relationship()` must be applied to each class. In order to achieve __bi-directional behavior__ in terms of _three separate relationships_ which serve as the opposite of `Company.employees`, the `relationship.back_populates` parameter is used between each of the relationships.
+
+The above __limitation__ is related to the current implementation, including that _concrete inheriting classes_ __do not share any of the attributes of the superclass__ and therefore __need distinct relationships__ to be set up.
+
+
+##### Loading Concrete Inheritance Mappings
+
+The _options_ for _loading with concrete inheritance_ are __limited__; generally, if _polymorphic loading_ is __configured on the mapper__ using one of the _declarative concrete mixins_, it __can't be modified at query time__ in current SQLAlchemy versions. Normally, the `with_polymorphic()` function would be __able to override__ the _style of loading used by concrete_, however due to _current limitations_ this is __not yet supported__.
