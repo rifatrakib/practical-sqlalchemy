@@ -110,3 +110,10 @@ SELECT "user".version_id AS user_version_id FROM "user" where
 ```
 
 It is __strongly recommended__ that _server side version counters_ only be used when __absolutely necessary__ and __only on backends that support `RETURNING`__, e.g. _PostgreSQL_, _Oracle_, _SQL Server_ (though SQL Server has major caveats when triggers are used), _Firebird_.
+
+
+#### Programmatic or Conditional Version Counters
+
+When *version_id_generator* is set to `False`, we can also __programmatically (and conditionally)__ set the `version identifier` on our object in the same way we assign any other mapped attribute. Such as if we used our _UUID_ example, but set *version_id_generator* to `False`, we can set the `version identifier` at our choosing.
+
+We can _update_ our `User` object __without incrementing the version counter__ as well; the value of the _counter_ will __remain unchanged__, and the `UPDATE` statement will still _check against the previous value_. This may be __useful for schemes__ where only _certain classes of UPDATE_ are __sensitive__ to `concurrency issues`.
