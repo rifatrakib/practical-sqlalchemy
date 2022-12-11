@@ -150,3 +150,82 @@ for assoc in p.children:
 ```
 
 To enhance the _association object pattern_ such that __direct access__ to the _Association_ object is __optional__, SQLAlchemy provides the __Association Proxy extension__. This extension allows the _configuration of attributes_ which will __access two "hops" with a single access__, one "hop" to the _associated object_, and a second to a _target attribute_.
+
+
+#### Late-Evaluation of Relationship Arguments
+
+Many of the examples in the preceding sections illustrate mappings where the various `relationship()` constructs __refer to their target classes using a string name__, rather than the class itself.
+
+```
+class Parent(Base):
+    # ...
+    children = relationship("Child", back_populates="parent")
+
+
+class Child(Base):
+    # ...
+    parent = relationship("Parent", back_populates="children")
+```
+
+These _string names_ are __resolved into classes__ in the `mapper resolution stage`, which is an _internal process_ that occurs typically __after all mappings have been defined__ and is __normally triggered__ by the _first usage of the mappings_ themselves. The _registry_ object is the `container` in which these __names are stored and resolved to the mapped classes__ they refer towards.
+
+In addition to the main class argument for `relationship()`, other arguments which depend upon the columns present on an as-yet undefined class may also be specified either as _Python functions_, or more commonly as _strings_. For most of these arguments except that of the main argument, __string inputs are evaluated as Python expressions__ using Python's built-in `eval()` function, as they are intended to receive complete SQL expressions.
+
+> ##### Warning
+>
+> As the Python `eval()` function is used to __interpret the late-evaluated string arguments__ passed to `relationship()` _mapper configuration construct_, these arguments __should not be repurposed__ such that they would receive untrusted user input; `eval()` is __not secure against untrusted user input__.
+
+The _full namespace_ available within this evaluation __includes all classes mapped for this `declarative base`__, as well as the _contents of the sqlalchemy package_, including expression functions like `desc()` and `sqlalchemy.sql.functions.func`.
+
+For the case where _more than one module contains a class of the same name_, _string class names_ can also be specified as `module-qualified paths` within any of these string expressions.
+
+```
+class Parent(Base):
+    __tablename__ = "parent_table"
+    id = Column(Integer, primary_key=True)
+    children = relationship(
+        "Child", back_populates="parent",
+        order_by="desc(module.Child.id)",
+        primaryjoin="Parent.id == module.Child.parent_id",
+    )
+```
+
+The `relationship()` construct also __accepts Python functions or lambdas__ as input for these arguments. This has the _advantage_ of providing __more compile-time safety__ and _better support for IDEs and PEP 484_ scenarios.
+
+```
+def _resolve_child_model():
+    from myapplication import Child
+    return Child
+
+
+class Parent(Base):
+    # ...
+    children = relationship(
+        _resolve_child_model(),
+        order_by=lambda: desc(_resolve_child_model().idd),
+        primaryjoin=lambda: Parent.id == _resolve_child_model().parent_id,
+    )
+```
+
+It should also be noted that, _any MapperProperty construct_ __can be added to a declarative base mapping at any time__. If we wanted to implement this `relationship()` after the _Address_ class were available, we could also apply it afterwards.
+
+```
+class Parent(Base):
+    ...
+
+
+class Child(Base):
+    ...
+
+
+Parent.children = relationship(Child, primaryjoin=Child.parent_id == Parent.id)
+```
+
+> ##### Note
+>
+> _assignment of mapped properties_ to a _declaratively mapped class_ will __only function correctly__ if the `"declarative base"` class is used, which also provides for a _metaclass-driven_ `__setattr__()` method which will __intercept these operations__. It __will not work__ if the _declarative decorator_ provided by `registry.mapped()` is used, __nor will it work__ for an _imperatively mapped class_ mapped by `registry.map_imperatively()`.
+
+
+##### Late-Evaluation for a many-to-many relationship
+
+_Many-to-many relationships_ include a reference to an _additional_, typically __non-mapped Table object__ that is __typically present__ in the _MetaData collection_ referred towards by the _registry_. The _late-evaluation system_ also includes support for having this attribute be specified as a `string argument` which will be __resolved from this `MetaData` collection__. Below we specify an _association table_ `keyword_author`, sharing the _MetaData collection_ associated with our _declarative base_ and its _registry_. We can then refer to this _Table_ by name in the `relationship.secondary` parameter.
