@@ -126,3 +126,27 @@ There are several possibilities here:
 * A _higher performing option_ here is to use `ON DELETE CASCADE` directives with the _foreign keys used by the database_. Assuming the database supports this feature, the database itself can be made to __automatically delete rows__ in the `"secondary"` table as referencing rows in `"child"` are deleted. SQLAlchemy can be __instructed to forego actively loading__ in the `Child.parents` collection in this case using the `relationship.passive_deletes` directive on `relationship()`.
 
 Note again, these _behaviors_ are __only relevant__ to the `relationship.secondary` option used with `relationship()`. If dealing with _association tables_ that are __mapped explicitly__ and are __not present__ in the `relationship.secondary` option of a relevant `relationship()`, _cascade rules_ can be _used instead_ to __automatically delete entities__ in reaction to a related entity being deleted.
+
+
+#### Association Object
+
+The _association object pattern_ is a _variant on many-to-many_: it's used when your _association table_ __contains additional columns beyond those which are foreign keys__ to the left and right tables. Instead of using the `relationship.secondary` argument, you _map a new class directly_ to the association table. The _left side_ of the relationship references the _association object via one-to-many_, and the _association class references the right side via many-to-one_.
+
+As always, the _bidirectional_ version makes use of `relationship.back_populates` or `relationship.backref`.
+
+Working with the _association pattern_ in its _direct form_ __requires__ that __child objects are associated with an association instance before being appended to the parent__; similarly, _access from parent to child goes through the association object_:
+
+```
+# create parent, append a child via association
+p = ParentModel()
+a = AssociationModel(extra_data="some data")
+a.child = ChildModel()
+p.children.append(a)
+
+# iterate through child objects via association, including association attributes
+for assoc in p.children:
+    print(assoc.extra_data)
+    print(assoc.child)
+```
+
+To enhance the _association object pattern_ such that __direct access__ to the _Association_ object is __optional__, SQLAlchemy provides the __Association Proxy extension__. This extension allows the _configuration of attributes_ which will __access two "hops" with a single access__, one "hop" to the _associated object_, and a second to a _target attribute_.
