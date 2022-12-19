@@ -29,3 +29,31 @@ The `relationship()` configuration here works in the same way as a __`"normal"` 
 Where above, the _id_ column is applied as the `relationship.remote_side` of the __parent__ `relationship()`, thus establishing *parent_id* as the `"local"` side, and the _relationship_ then behaves as a _many-to-one_.
 
 As always, __both directions can be combined into a bidirectional relationship__ using the `backref()` function.
+
+
+#### Composite Adjacency Lists
+
+A _sub-category_ of the _adjacency list relationship_ is the rare case where a __particular column is present__ on both the `"local"` and `"remote"` side of the _join condition_. An example is the _Folder_ class below; using a `composite primary key`, the *account_id* column __refers to itself__, to indicate __sub folders which are within the same account as that of the parent__; while *folder_id* refers to a __specific folder within that account__.
+
+```
+class Folder(Base):
+    __tablename__ = "folder"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["account_id", "parent_id"],
+            ["folder.account_id", "folder.folder_id"],
+        ),
+    )
+    
+    account_id = Column(Integer, primary_key=True)
+    folder_id = Column(Integer, primary_key=True)
+    parent_id = Column(Integer)
+    name = Column(String)
+    
+    parent_folder = relationship(
+        "Folder", backref="child_folders",
+        remote_side=[account_id, folder_id],
+    )
+```
+
+Above, we pass *account_id* into the `relationship.remote_side` list. `relationship()` recognizes that the *account_id* column here is __on both sides__, and aligns the `"remote"` column along with the *folder_id* column, which it __recognizes as uniquely present__ on the `"remote"` side.
