@@ -189,3 +189,28 @@ Will render as:
 SELECT ip_address.id AS ip_address_id, ip_address.v4address AS ip_address_v4address
 FROM ip_address JOIN network ON ip_address.v4address << network.v4representation
 ```
+
+
+#### Custom operators based on SQL functions
+
+A variant to the use case for `Operators.op.is_comparison` is when we __aren't using an operator, but a SQL function__. The typical example of this use case is the _PostgreSQL PostGIS functions_; however, __any SQL function on any database that resolves to a binary condition may apply__. To suit this use case, the `FunctionElement.as_comparison()` method can __modify any SQL function__, such as those invoked from the _func namespace_, to indicate to the ORM that the function produces a comparison of two expressions. The below example illustrates this with the _Geoalchemy2_ library.
+
+```
+class Polygon(Base):
+    __tablename__ = "polygon"
+    id = Column(Integer, primary_key=True)
+    geom = Column(Geometry("POLYGON", srid=4326))
+    points = relationship(
+        "Point",
+        primaryjoin="func.ST_Contains(foreign(Polygon.geom), Point.geom).as_comparison(1, 2)",
+        viewonly=True,
+    )
+
+
+class Point(Base):
+    __tablename__ = "point"
+    id = Column(Integer, primary_key=True)
+    geom = Column(Geometry("POINT", srid=4326))
+```
+
+Above, the `FunctionElement.as_comparison()` indicates that the `func.ST_Contains()` SQL function is __comparing__ the _Polygon.geom_ and _Point.geom_ expressions. The `foreign()` annotation additionally notes which column takes on the _"foreign key" role_ in this particular relationship.
