@@ -144,3 +144,48 @@ ON host_entry_1.ip_address = CAST(host_entry.content AS INET)
 ```
 
 An alternative syntax to the above is to use the `foreign()` and `remote()` _annotations_, __inline within__ the `relationship.primaryjoin` expression. This syntax represents the _annotations_ that `relationship()` __normally applies by itself__ to the join condition given the *relationship.foreign_keys* and *relationship.remote_side* arguments. These functions may be __more succinct when an explicit join condition is present__, and additionally serve to mark exactly the column that is __"foreign"__ or __"remote"__ independent of whether that column is stated multiple times or within complex SQL expressions.
+
+
+#### Using custom operators in join conditions
+
+Another use case for relationships is the use of custom operators, such as _PostgreSQL_'s __"is contained within"__ `<<` operator when _joining with types such as INET and CIDR_. For _custom boolean operators_ we use the `Operators.bool_op()` function:
+
+```
+inet_column.bool_op("<<")(cidr_column)
+```
+
+A comparison like the above may be __used directly__ with `relationship.primaryjoin` when _constructing_ a `relationship()`.
+
+```
+class IPA(Base):
+    __tablename__ = "ip_address"
+
+    id = Column(Integer, primary_key=True)
+    v4address = Column(INET)
+
+    network = relationship(
+        "Network",
+        primaryjoin="IPA.v4address.bool_op('<<')" "(foreign(Network.v4representation))",
+        viewonly=True,
+    )
+
+
+class Network(Base):
+    __tablename__ = "network"
+
+    id = Column(Integer, primary_key=True)
+    v4representation = Column(CIDR)
+```
+
+Above, a query such as:
+
+```
+session.query(IPA).join(IPA.network)
+```
+
+Will render as:
+
+```
+SELECT ip_address.id AS ip_address_id, ip_address.v4address AS ip_address_v4address
+FROM ip_address JOIN network ON ip_address.v4address << network.v4representation
+```
