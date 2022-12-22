@@ -110,3 +110,37 @@ Within this string SQL expression, we made use of the `and_()` conjunction const
 > When passed as a _Python-evaluable string_, the `relationship.foreign_keys` argument is interpreted using Python's `eval()` function. __DO NOT PASS UNTRUSTED INPUT TO THIS STRING__.
 
 The custom criteria we use in a `relationship.primaryjoin` is generally __only significant__ when SQLAlchemy is _rendering SQL in order to load or represent this relationship_. That is, it's used in the SQL statement that's emitted in order to _perform a per-attribute lazy load_, or when a join is _constructed at query time_, such as via `Query.join()`, or via the __`eager "joined"` or `"subquery"` styles of loading__. When _in-memory objects_ are being _manipulated_, we can place any _Address_ object we'd like into the *boston_addresses* collection, regardless of what the value of the `.city` attribute is. The objects will remain __present in the collection until the attribute is expired and re-loaded__ from the database where the criterion is applied. When a _flush_ occurs, the objects inside of *boston_addresses* will be __flushed unconditionally__, assigning value of the primary key _user.id_ column onto the __foreign-key-holding__ *address.user_id* column for each row. The city criteria has __no effect__ here, as the _flush process_ only cares about __synchronizing primary key values into referencing foreign key values__.
+
+
+#### Creating Custom Foreign Conditions
+
+Another element of the _primary join condition_ is how those columns considered __`"foreign"`__ are determined. Usually, some _subset of Column objects_ will specify _ForeignKey_, or otherwise be _part of a ForeignKeyConstraint_ that's relevant to the join condition. `relationship()` looks to this _foreign key status_ as it decides __how it should load and persist data__ for this relationship. However, the `relationship.primaryjoin` argument can be used to __create a join condition that doesn't involve any `"schema"` level foreign keys__. We can combine `relationship.primaryjoin` along with *relationship.foreign_keys* and *relationship.remote_side* __explicitly__ in order to establish such a join.
+
+Below, a class _HostEntry_ joins to itself, equating the string content column to the ip_address column, which is a _PostgreSQL_ type called _INET_. We need to use `cast()` in order to cast one side of the join to the type of the other.
+
+```
+class HostEntry(Base):
+    __tablename__ = "host_entry"
+    
+    id = Column(Integer, primary_key=True)
+    ip_address = Column(INET)
+    content = Column(String(50))
+    
+    # relationship() using explicit foreign_keys, remote_side
+    parent_host = relationship(
+        "HostEntry",
+        primaryjoin=ip_address == cast(content, INET),
+        foreign_keys=content,
+        remote_side=ip_address,
+    )
+```
+
+The above relationship will produce a join like:
+
+```
+SELECT host_entry.id, host_entry.ip_address, host_entry.content
+FROM host_entry JOIN host_entry AS host_entry_1
+ON host_entry_1.ip_address = CAST(host_entry.content AS INET)
+```
+
+An alternative syntax to the above is to use the `foreign()` and `remote()` _annotations_, __inline within__ the `relationship.primaryjoin` expression. This syntax represents the _annotations_ that `relationship()` __normally applies by itself__ to the join condition given the *relationship.foreign_keys* and *relationship.remote_side* arguments. These functions may be __more succinct when an explicit join condition is present__, and additionally serve to mark exactly the column that is __"foreign"__ or __"remote"__ independent of whether that column is stated multiple times or within complex SQL expressions.
