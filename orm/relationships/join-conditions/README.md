@@ -74,3 +74,39 @@ billing_address = relationship("Address", foreign_keys="Customer.billing_address
 > ##### Warning
 >
 > When passed as a _Python-evaluable string_, the `relationship.foreign_keys` argument is interpreted using Python's `eval()` function. __DO NOT PASS UNTRUSTED INPUT TO THIS STRING__.
+
+
+#### Specifying Alternate Join Conditions
+
+The _default behavior_ of `relationship()` when constructing a join is that it __equates the value of primary key columns on one side to that of foreign-key-referring columns on the other__. We __can change__ this criterion to be anything we'd like using the `relationship.primaryjoin` argument, as well as the `relationship.secondaryjoin` argument in the case when a _"secondary" table_ is used.
+
+In the example below, using the _User_ class as well as an _Address_ class which stores a street address, we create a relationship *boston_addresses* which will only load those Address objects which specify a city of "Boston".
+
+```
+class User(Base):
+    __tablename__ = "user"
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    boston_addresses = relationship(
+        "Address",
+        primaryjoin="and_(User.id==Address.user_id, Address.city=='Boston')",
+    )
+
+
+class Address(Base):
+    __tablename__ = "address"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"))
+    street = Column(String)
+    city = Column(String)
+    state = Column(String)
+    zip = Column(String)
+```
+
+Within this string SQL expression, we made use of the `and_()` conjunction construct to __establish two distinct predicates__ for the _join condition_ - joining both the _User.id_ and *Address.user_id* columns to each other, as well as __limiting rows__ in _Address_ to just `city='Boston'`. When using Declarative, rudimentary SQL functions like `and_()` are __automatically available__ in the evaluated namespace of a __string `relationship()` argument__.
+
+> ##### Warning
+>
+> When passed as a _Python-evaluable string_, the `relationship.foreign_keys` argument is interpreted using Python's `eval()` function. __DO NOT PASS UNTRUSTED INPUT TO THIS STRING__.
+
+The custom criteria we use in a `relationship.primaryjoin` is generally __only significant__ when SQLAlchemy is _rendering SQL in order to load or represent this relationship_. That is, it's used in the SQL statement that's emitted in order to _perform a per-attribute lazy load_, or when a join is _constructed at query time_, such as via `Query.join()`, or via the __`eager "joined"` or `"subquery"` styles of loading__. When _in-memory objects_ are being _manipulated_, we can place any _Address_ object we'd like into the *boston_addresses* collection, regardless of what the value of the `.city` attribute is. The objects will remain __present in the collection until the attribute is expired and re-loaded__ from the database where the criterion is applied. When a _flush_ occurs, the objects inside of *boston_addresses* will be __flushed unconditionally__, assigning value of the primary key _user.id_ column onto the __foreign-key-holding__ *address.user_id* column for each row. The city criteria has __no effect__ here, as the _flush process_ only cares about __synchronizing primary key values into referencing foreign key values__.
