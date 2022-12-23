@@ -307,3 +307,32 @@ class Article(Base):
         "Writer.magazine_id == Article.magazine_id)",
     )
 ```
+
+
+#### Non-relational Comparisons / Materialized Path
+
+Using _custom expressions_ means we can produce __unorthodox join conditions__ that _don't obey the usual primary/foreign key model_. One such example is the `materialized path pattern`, where we __compare strings for overlapping path tokens in order to produce a tree structure__.
+
+Through careful use of `foreign()` and `remote()`, we can build a _relationship_ that effectively produces a __rudimentary materialized path system__. Essentially, when `foreign()` and `remote()` are on the __same side__ of the comparison expression, the _relationship_ is considered to be _"one to many"_; when they are on __different sides__, the _relationship_ is considered to be _"many to one"_. For the comparison we'll use here, we'll be dealing with collections so we keep things configured as _"one to many"_.
+
+```
+class Element(Base):
+    __tablename__ = "element"
+
+    path = Column(String, primary_key=True)
+
+    descendants = relationship(
+        "Element",
+        primaryjoin=remote(foreign(path)).like(path.concat("/%")),
+        viewonly=True,
+        order_by=path,
+    )
+```
+
+Above, if given an _Element_ object with a path attribute of _"/foo/bar2"_, we seek for a load of _Element.descendants_ to look like:
+
+```
+SELECT element.path AS element_path
+FROM element
+WHERE element.path LIKE ('/foo/bar2' || '/%') ORDER BY element.path
+```
