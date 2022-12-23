@@ -214,3 +214,96 @@ class Point(Base):
 ```
 
 Above, the `FunctionElement.as_comparison()` indicates that the `func.ST_Contains()` SQL function is __comparing__ the _Polygon.geom_ and _Point.geom_ expressions. The `foreign()` annotation additionally notes which column takes on the _"foreign key" role_ in this particular relationship.
+
+
+#### Overlapping Foreign Keys
+
+A rare scenario can arise when _composite foreign keys_ are used, such that a __single column may be the subject of more than one column referred to via foreign key constraint__.
+
+Consider an (admittedly complex) mapping such as the _Magazine_ object, referred to both by the _Writer_ object and the _Article_ object __using a composite primary key scheme__ that includes *magazine_id* for both; then to _make Article refer to Writer as well_, *Article.magazine_id* is involved in __two separate relationships__; _Article.magazine_ and _Article.writer_.
+
+```
+class Magazine(Base):
+    __tablename__ = "magazine"
+
+    id = Column(Integer, primary_key=True)
+
+
+class Article(Base):
+    __tablename__ = "article"
+
+    article_id = Column(Integer)
+    magazine_id = Column(ForeignKey("magazine.id"))
+    writer_id = Column()
+
+    magazine = relationship("Magazine")
+    writer = relationship("Writer")
+
+    __table_args__ = (
+        PrimaryKeyConstraint("article_id", "magazine_id"),
+        ForeignKeyConstraint(
+            ["writer_id", "magazine_id"], ["writer.id", "writer.magazine_id"]
+        ),
+    )
+
+
+class Writer(Base):
+    __tablename__ = "writer"
+
+    id = Column(Integer, primary_key=True)
+    magazine_id = Column(ForeignKey("magazine.id"), primary_key=True)
+    magazine = relationship("Magazine")
+```
+
+When the above mapping with _uncommented Article_ is configured, we will see this warning emitted:
+
+```
+SAWarning: relationship 'Article.writer' will copy column
+writer.magazine_id to column article.magazine_id,
+which conflicts with relationship(s): 'Article.magazine'
+(copies magazine.id to article.magazine_id). Consider applying
+viewonly=True to read-only relationships, or provide a primaryjoin
+condition marking writable columns with the foreign() annotation.
+```
+
+What this refers to originates from the fact that *Article.magazine_id* is the __subject of two different foreign key constraints__; it refers to _Magazine.id_ directly as a source column, but also refers to *Writer.magazine_id* as a source column in the context of the _composite key to Writer_. If we associate an _Article_ with a particular _Magazine_, but then associate the _Article_ with a _Writer_ that's associated with a __different__ _Magazine_, the ORM will __overwrite__ *Article.magazine_id* __non-deterministically__, silently changing which magazine we refer towards; it may also attempt to place _NULL_ into this column if we _de-associate a Writer from an Article_. The warning lets us know this is the case.
+
+To solve this, we need to __break out the behavior__ of _Article_ to __include all three of the following features__:
+
+1. _Article_ first and foremost writes to *Article.magazine_id* __based on data persisted__ in the _Article.magazine_ relationship only, that is a __value copied__ from _Magazine.id_.
+
+2. _Article_ can write to *Article.writer_id* on behalf of data persisted in the _Article.writer_ relationship, but only the _Writer.id_ column; the *Writer.magazine_id* column __should not be written__ into *Article.magazine_id* as it ultimately is sourced from _Magazine.id_.
+
+3. _Article_ takes *Article.magazine_id* into account when __loading__ _Article.writer_, even though it __doesn't write to it on behalf of this relationship__.
+
+To get just `#1` and `#2`, we could specify only *Article.writer_id* as the `"foreign keys"` for _Article.writer_.
+
+```
+class Article(Base):
+    # ...
+
+    writer = relationship("Writer", foreign_keys="Article.writer_id")
+```
+
+However, this has the __effect of `Article.writer` not taking `Article.magazine_id` into account when querying against `Writer`__:
+
+```
+SELECT article.article_id AS article_article_id,
+    article.magazine_id AS article_magazine_id,
+    article.writer_id AS article_writer_id
+FROM article
+JOIN writer ON writer.id = article.writer_id
+```
+
+Therefore, to get at all of `#1`, `#2`, and `#3`, we express the _join condition_ as well as which __columns to be written by combining `relationship.primaryjoin` fully__, along with either the `relationship.foreign_keys` argument, or __more succinctly__ by _annotating_ with `foreign()`.
+
+```
+class Article(Base):
+    # ...
+
+    writer = relationship(
+        "Writer",
+        primaryjoin="and_(Writer.id == foreign(Article.writer_id), "
+        "Writer.magazine_id == Article.magazine_id)",
+    )
+```
