@@ -336,3 +336,91 @@ SELECT element.path AS element_path
 FROM element
 WHERE element.path LIKE ('/foo/bar2' || '/%') ORDER BY element.path
 ```
+
+
+#### Self-Referential Many-to-Many Relationship
+
+_Many to many relationships_ can be customized by _one or both_ of `relationship.primaryjoin` and `relationship.secondaryjoin` - the _latter_ is __significant__ for a relationship that specifies a _many-to-many reference_ using the `relationship.secondary` argument. A common situation which involves the usage of `relationship.primaryjoin` and `relationship.secondaryjoin` is when __establishing a many-to-many relationship from a class to itself__.
+
+```
+node_to_node = Table(
+    "node_to_node",
+    Base.metadata,
+    Column("left_node_id", Integer, ForeignKey("node.id"), primary_key=True),
+    Column("right_node_id", Integer, ForeignKey("node.id"), primary_key=True),
+)
+
+
+class NodeObject(Base):
+    __tablename__ = "node_object"
+    id = Column(Integer, primary_key=True)
+    label = Column(String)
+    right_nodes = relationship(
+        "NodeObject",
+        secondary=node_to_node,
+        primaryjoin=id == node_to_node.c.left_node_id,
+        secondaryjoin=id == node_to_node.c.right_node_id,
+        backref="left_nodes",
+    )
+```
+
+Where above, SQLAlchemy __can't know automatically__ which columns should connect to which for the *right_nodes* and *left_nodes* relationships. The `relationship.primaryjoin` and `relationship.secondaryjoin` arguments _establish how we'd like to join to the association table_. In the Declarative form above, as we are declaring these conditions within the Python block that corresponds to the _NodeObject_ class, the _id_ variable is __available directly as the Column object__ we wish to join with.
+
+Alternatively, we can define the `relationship.primaryjoin` and `relationship.secondaryjoin` arguments using strings, which is __suitable__ in the case that our __configuration does not have__ either the _NodeObject.id_ column object available yet or the *node_to_node* table perhaps __isn't yet available__. When referring to a plain _Table_ object in a declarative string, we use the string name of the table as it is present in the _MetaData_.
+
+```
+class NodeString(Base):
+    __tablename__ = "node_string"
+    id = Column(Integer, primary_key=True)
+    label = Column(String)
+    right_nodes = relationship(
+        "NodeString",
+        secondary="node_to_node",
+        primaryjoin="NodeString.id==node_to_node.c.left_node_id",
+        secondaryjoin="NodeString.id==node_to_node.c.right_node_id",
+        backref="left_nodes",
+    )
+```
+
+> ##### Warning
+>
+> When passed as a _Python-evaluable string_, the `relationship.foreign_keys` argument is interpreted using Python's `eval()` function. __DO NOT PASS UNTRUSTED INPUT TO THIS STRING__.
+
+A _classical mapping situation_ here is similar, where *node_to_node_meta* __can be joined__ to *node_var.c.id*.
+
+```
+node_to_node_meta = Table(
+    "node_to_node_meta",
+    metadata_obj,
+    Column("left_node_id", Integer, ForeignKey("node.id"), primary_key=True),
+    Column("right_node_id", Integer, ForeignKey("node.id"), primary_key=True),
+)
+
+node_var = Table(
+    "node_var",
+    metadata_obj,
+    Column("id", Integer, primary_key=True),
+    Column("label", String),
+)
+
+
+class NodeVar(object):
+    pass
+
+
+mapper_registry.map_imperatively(
+    NodeVar,
+    node_var,
+    properties={
+        "right_nodes": relationship(
+            NodeVar,
+            secondary=node_to_node_meta,
+            primaryjoin=node_var.c.id == node_to_node_meta.c.left_node_id,
+            secondaryjoin=node_var.c.id == node_to_node_meta.c.right_node_id,
+            backref="left_nodes",
+        )
+    },
+)
+```
+
+Note that in both examples, the `relationship.backref` keyword specifies a *left_nodes* backref - when `relationship()` __creates the second relationship in the reverse direction__, it's __smart enough__ to __reverse__ the _relationship.primaryjoin_ and _relationship.secondaryjoin_ arguments.
