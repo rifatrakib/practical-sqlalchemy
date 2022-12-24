@@ -424,3 +424,28 @@ mapper_registry.map_imperatively(
 ```
 
 Note that in both examples, the `relationship.backref` keyword specifies a *left_nodes* backref - when `relationship()` __creates the second relationship in the reverse direction__, it's __smart enough__ to __reverse__ the _relationship.primaryjoin_ and _relationship.secondaryjoin_ arguments.
+
+
+#### Composite `"Secondary"` Joins
+
+Sometimes, when one seeks to build a `relationship()` between two tables there is a __need for more than just two or three tables__ to be involved in order to join them. This is an area of `relationship()` where one seeks to _push the boundaries_ of what's possible, and often the ultimate solution to many of these _exotic use cases_ needs to be _hammered out_ on the SQLAlchemy mailing list.
+
+In more recent versions of SQLAlchemy, the `relationship.secondary` parameter can be used in some of these cases in order to provide a __composite target consisting of multiple tables__.
+
+In the above example, we provide all three of _relationship.secondary_, _relationship.primaryjoin_, and _relationship.secondaryjoin_, in the declarative style _referring to the named tables a, b, c, d_ __directly__. A query from A to D looks like:
+
+```
+session.query(A).join(A.d).all()
+
+SELECT a.id AS a_id, a.b_id AS a_b_id
+FROM a JOIN (
+    b AS b_1 JOIN d AS d_1 ON b_1.d_id = d_1.id
+        JOIN c AS c_1 ON c_1.d_id = d_1.id)
+    ON a.b_id = b_1.id AND a.id = c_1.a_id JOIN d ON d.id = b_1.d_id
+```
+
+In the above example, we take advantage of being able to __stuff multiple tables into a `"secondary"` container__, so that we can _join across many tables_ while still keeping things _"simple"_ for `relationship()`, in that there's _just "one" table on both the "left" and the "right" side_; the _complexity_ is __kept within the middle__.
+
+> ##### Warning
+>
+> A relationship like the above is typically marked as `viewonly=True` and should be considered as __read-only__. While there are sometimes ways to make relationships like the above _writable_, this is _generally complicated and error prone_.
