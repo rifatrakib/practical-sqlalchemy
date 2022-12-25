@@ -594,3 +594,20 @@ ORDER BY a_1.id
 Above, for _each matching primary key_ in `"a"`, we will get the __first ten "bs" as ordered by "b.id"__. By *partitioning on "a_id"* we ensure that _each "row number"_ is __local to the parent `"a_id"`__.
 
 Such a mapping would _ordinarily_ also __include a "plain" relationship__ from _"A" to "B"_, for _persistence operations_ as well as when the __full set of "B" objects per "A" is desired__.
+
+
+#### Building Query-Enabled Properties
+
+Very _ambitious custom join conditions_ may __fail to be directly persistable__, and in some cases __may not even load correctly__. To _remove the persistence part_ of the equation, use the flag _relationship.viewonly_ on the `relationship()`, which establishes it as a __read-only attribute__ (_data written to the collection will be ignored on flush()_). However, in _extreme cases_, consider using a _regular Python property in conjunction with Query_.
+
+```
+class User(Base):
+    __tablename__ = "user"
+    id = Column(Integer, primary_key=True)
+
+    @property
+    def addresses(self):
+        return object_session(self).query(Address).with_parent(self).filter(...).all()
+```
+
+In other cases, the _descriptor_ can be built to __make use of existing `in-Python` data__.
