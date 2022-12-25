@@ -449,3 +449,93 @@ In the above example, we take advantage of being able to __stuff multiple tables
 > ##### Warning
 >
 > A relationship like the above is typically marked as `viewonly=True` and should be considered as __read-only__. While there are sometimes ways to make relationships like the above _writable_, this is _generally complicated and error prone_.
+
+
+#### Relationship to Aliased Class
+
+In the previous section, we illustrated a technique where we used _relationship.secondary_ in order to __place additional tables within a join condition__. There is one _complex join_ case where even this technique is __not sufficient__; when we seek to _join from A to B_, making use of _any number of C, D, etc. in between_, however there are also __join conditions between A and B directly__. In this case, the _join from A to B_ may be __difficult to express with just a complex `relationship.primaryjoin` condition__, as the _intermediary tables may need special handling_, and it is also __not expressible__ with a _relationship.secondary_ object, since the `A->secondary->B` pattern __does not support any references between A and B directly__. When this _extremely advanced case_ arises, we can resort to __creating a second mapping__ as a `target` for the _relationship_. This is where we use `AliasedClass` in order to make a _mapping to a class that includes all the additional tables we need for this join_. In order to produce this mapper as an _"alternative" mapping_ for our class, we use the `aliased()` function to produce the new construct, then use `relationship()` against the object as though it were a plain mapped class.
+
+Below illustrates a `relationship()` with a _simple join from A to B_, however the _primaryjoin_ condition is __augmented with two additional entities__ C and D, which also must have rows that line up with the rows in both A and B simultaneously.
+
+```
+class A(Base):
+    __tablename__ = "a"
+    id = Column(Integer, primary_key=True)
+    b_id = Column(ForeignKey("b.id"))
+
+
+class B(Base):
+    __tablename__ = "b"
+    id = Column(Integer, primary_key=True)
+
+
+class C(Base):
+    __tablename__ = "c"
+    id = Column(Integer, primary_key=True)
+    a_id = Column(ForeignKey("a.id"))
+    some_c_value = Column(String)
+
+
+class D(Base):
+    __tablename__ = "d"
+    id = Column(Integer, primary_key=True)
+    c_id = Column(ForeignKey("c.id"))
+    b_id = Column(ForeignKey("b.id"))
+    some_d_value = Column(String)
+
+
+# 1. set up the join() as a variable, so we can refer
+# to it in the mapping multiple times.
+j = join(B, D, D.b_id == B.id).join(C, C.id == D.c_id)
+
+# 2. Create an AliasedClass to B
+B_viacd = aliased(B, j, flat=True)
+
+A.b = relationship(B_viacd, primaryjoin=A.b_id == j.c.b_id)
+```
+
+With the above mapping, a simple join looks like:
+
+```
+session.query(A).join(A.b).all()
+
+SELECT a.id AS a_id, a.b_id AS a_b_id
+FROM a JOIN (b JOIN d ON d.b_id = b.id JOIN c ON c.id = d.c_id) ON a.b_id = b.id
+```
+
+
+##### Using the AliasedClass target in Queries
+
+In the previous example, the _A.b_ relationship refers to the *B_viacd* entity as the `target`, and __not the B class directly__. To _add additional criteria_ involving the _A.b_ relationship, it's __typically necessary to reference the B_viacd directly__ rather than using B, especially in a case where the _target entity of A.b_ is to be __transformed__ into an `alias` or a `subquery`. Below illustrates the _same relationship_ using a _subquery_, rather than a join:
+
+```
+subq = select(B).join(D, D.b_id == B.id).join(C, C.id == D.c_id).subquery()
+B_viacd_subquery = aliased(B, subq)
+A.b = relationship(B_viacd_subquery, primaryjoin=A.b_id == subq.c.id)
+```
+
+A query using the above _A.b_ relationship will render a `subquery`:
+
+```
+session.query(A).join(A.b).all()
+
+SELECT a.id AS a_id, a.b_id AS a_b_id
+FROM a JOIN (SELECT b.id AS id, b.some_b_column AS some_b_column
+FROM b JOIN d ON d.b_id = b.id JOIN c ON c.id = d.c_id) AS anon_1 ON a.b_id = anon_1.id
+```
+
+If we want to _add additional criteria_ based on the _A.b_ join, we must do so in terms of *B_viacd_subquery* rather than B directly:
+
+```
+(
+    sess.query(A)
+    .join(A.b)
+    .filter(B_viacd_subquery.some_b_column == "some b")
+    .order_by(B_viacd_subquery.id)
+).all()
+
+SELECT a.id AS a_id, a.b_id AS a_b_id
+FROM a JOIN (SELECT b.id AS id, b.some_b_column AS some_b_column
+FROM b JOIN d ON d.b_id = b.id JOIN c ON c.id = d.c_id) AS anon_1 ON a.b_id = anon_1.id
+WHERE anon_1.some_b_column = ? ORDER BY anon_1.id
+```
