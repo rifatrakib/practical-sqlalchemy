@@ -539,3 +539,58 @@ FROM a JOIN (SELECT b.id AS id, b.some_b_column AS some_b_column
 FROM b JOIN d ON d.b_id = b.id JOIN c ON c.id = d.c_id) AS anon_1 ON a.b_id = anon_1.id
 WHERE anon_1.some_b_column = ? ORDER BY anon_1.id
 ```
+
+
+#### Row-Limited Relationships with Window Functions
+
+Another interesting use case for relationships to _AliasedClass_ objects are situations where the __relationship needs to join to a specialized `SELECT`__ of any form. One scenario is when the use of a `window function` is desired, such as to __limit how many rows should be returned for a relationship__. The example below illustrates a _non-primary mapper relationship_ that will load the __first ten items for each collection__.
+
+```
+class A(Base):
+    __tablename__ = "a"
+    id = Column(Integer, primary_key=True)
+
+
+class B(Base):
+    __tablename__ = "b"
+    id = Column(Integer, primary_key=True)
+    a_id = Column(ForeignKey("a.id"))
+
+
+partition = select(
+    B, func.row_number().over(order_by=B.id, partition_by=B.a_id).label("index")
+).alias()
+
+partitioned_b = aliased(B, partition)
+
+A.partitioned_bs = relationship(
+    partitioned_b, primaryjoin=and_(partitioned_b.a_id == A.id, partition.c.index < 10)
+)
+```
+
+We can use the above *partitioned_bs* relationship with most of the _loader strategies_, such as `selectinload()`:
+
+```
+for a1 in s.query(A).options(selectinload(A.partitioned_bs)):
+    print(a1.partitioned_bs)  # <-- will be no more than ten objects
+```
+
+Where above, the `"selectinload"` query looks like:
+
+```
+SELECT
+    a_1.id AS a_1_id, anon_1.id AS anon_1_id, anon_1.a_id AS anon_1_a_id,
+    anon_1.data AS anon_1_data, anon_1.index AS anon_1_index
+FROM a AS a_1
+JOIN (
+    SELECT b.id AS id, b.a_id AS a_id, b.data AS data,
+    row_number() OVER (PARTITION BY b.a_id ORDER BY b.id) AS index
+    FROM b) AS anon_1
+ON anon_1.a_id = a_1.id AND anon_1.index < %(index_1)s
+WHERE a_1.id IN ( ... primary key collection ...)
+ORDER BY a_1.id
+```
+
+Above, for _each matching primary key_ in `"a"`, we will get the __first ten "bs" as ordered by "b.id"__. By *partitioning on "a_id"* we ensure that _each "row number"_ is __local to the parent `"a_id"`__.
+
+Such a mapping would _ordinarily_ also __include a "plain" relationship__ from _"A" to "B"_, for _persistence operations_ as well as when the __full set of "B" objects per "A" is desired__.
