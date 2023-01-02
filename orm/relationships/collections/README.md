@@ -104,3 +104,169 @@ class LazyClass(Base):
 ```
 
 Above, _attribute access_ on the _children collection_ will __raise an exception__ if it was __not previously eagerloaded__. This includes _read access_ but for collections will _also affect write access_, as __collections can't be mutated without first loading them__. The rationale for this is to __ensure that an application is not emitting any unexpected lazy loads within a certain context__. Rather than having to read through SQL logs to determine that all necessary attributes were _eager loaded_, the `"raise" strategy` will _cause unloaded attributes to raise immediately if accessed_. The _raise strategy_ is also _available on a query_ option basis using the `raiseload()` loader option.
+
+
+#### Customizing Collection Access
+
+Mapping a _one-to-many_ or _many-to-many_ relationship results in a _collection of values accessible through an attribute_ on the parent instance. _By default_, this _collection_ is a `list`. _Collections_ are __not limited to lists__. _Sets_, _mutable sequences_ and _almost any other Python object that can act as a container_ can be used in place of the default list, by specifying the `relationship.collection_class` option on `relationship()`.
+
+
+##### Dictionary Collections
+
+A little _extra detail_ is needed when using a `dictionary` as a collection. This because _objects are always loaded from the database as lists_, and a __key-generation strategy__ must be available to _populate the dictionary correctly_. The `attribute_mapped_collection()` function is by far the _most common way_ to achieve a simple dictionary collection. It produces a _dictionary class_ that will _apply a particular attribute of the mapped class as a key_. Below we map an _Item_ class containing a dictionary of _Note_ items keyed to the _Note.keyword_ attribute.
+
+```
+class Item(Base):
+    __tablename__ = "item"
+    id = Column(Integer, primary_key=True)
+    notes = relationship(
+        "Note",
+        collection_class=attribute_mapped_collection("keyword"),
+        cascade="all, delete-orphan",
+    )
+
+
+class Note(Base):
+    __tablename__ = "note"
+    id = Column(Integer, primary_key=True)
+    item_id = Column(Integer, ForeignKey("item.id"), nullable=False)
+    keyword = Column(String)
+    text = Column(String)
+    
+    def __init__(self, keyword, text):
+        self.keyword = keyword
+        self.text = text
+```
+
+_Item.notes_ is then a dictionary:
+
+```
+item = Item()
+item.notes["a"] = Note("a", "atext")
+item.notes.items()
+```
+
+`attribute_mapped_collection()` will ensure that the _.keyword_ attribute of each _Note_ complies with the key in the dictionary. Such as, when assigning to _Item.notes_, the dictionary key we supply must match that of the actual _Note_ object:
+
+```
+item = Item()
+item.notes = {
+    "a": Note("a", "atext"),
+    "b": Note("b", "btext"),
+}
+```
+
+The attribute which `attribute_mapped_collection()` uses as a key __does not need to be mapped at all__! Using a regular Python `@property` __allows virtually any detail or combination of details__ about the object to be used as the key, as below when we establish it as a tuple of _Note.keyword_ and the first ten letters of the _Note.text_ field.
+
+```
+class ItemBackref(Base):
+    __tablename__ = "item_backref"
+    id = Column(Integer, primary_key=True)
+    notes = relationship(
+        "NoteBackref",
+        collection_class=attribute_mapped_collection("note_key"),
+        backref="item",
+        cascade="all, delete-orphan",
+    )
+
+
+class NoteBackref(Base):
+    __tablename__ = "note_backref"
+    id = Column(Integer, primary_key=True)
+    item_id = Column(Integer, ForeignKey("item_backref.id"), nullable=False)
+    keyword = Column(String)
+    text = Column(String)
+    
+    @property
+    def note_key(self):
+        return (self.keyword, self.text[0:10])
+    
+    def __init__(self, keyword, text):
+        self.keyword = keyword
+        self.text = text
+```
+
+Above we added a _NoteBackref.item_ backref. Assigning to this __reverse relationship__, the _NoteBackref_ is added to the _ItemBackref.notes_ dictionary and the _key is generated_ for us __automatically__.
+
+```
+item = ItemBackref()
+n1 = NoteBackref("a", "atext")
+n1.item = item
+item.notes
+```
+
+Other _built-in_ dictionary types include `column_mapped_collection()`, which is almost like `attribute_mapped_collection()` except given the _Column_ object __directly__.
+
+```
+class ItemColumned(Base):
+    __tablename__ = "item_columned"
+    id = Column(Integer, primary_key=True)
+    notes = relationship(
+        "Note",
+        collection_class=column_mapped_collection(Note.__table__.c.keyword),
+        cascade="all, delete-orphan",
+    )
+```
+
+as well as `mapped_collection()` which is __passed any callable function__. Note that it's usually easier to use `attribute_mapped_collection()` along with a `@property` as mentioned earlier:
+
+```
+class ItemMapped(Base):
+    __tablename__ = "item_mapped"
+    id = Column(Integer, primary_key=True)
+    notes = relationship(
+        "Note",
+        collection_class=mapped_collection(lambda note: note.text[0:10]),
+        cascade="all, delete-orphan",
+    )
+```
+
+_Dictionary mappings_ are often combined with the `"Association Proxy"` extension to __produce streamlined dictionary views__.
+
+
+##### Dealing with Key Mutations and back-populating for Dictionary collections
+
+When using `attribute_mapped_collection()`, the _"key"_ for the dictionary is _taken from an attribute_ on the target object. __Changes to this key are not tracked__. This means that the __key must be assigned towards when it is first used__, and if the key changes, the collection will not be mutated. A typical example where this might be an issue is when _relying upon backrefs to populate an attribute mapped collection_.
+
+```
+class A(Base):
+    __tablename__ = "a"
+    id = Column(Integer, primary_key=True)
+    bs = relationship(
+        "B",
+        collection_class=attribute_mapped_collection("data"),
+        back_populates="a",
+    )
+
+
+class B(Base):
+    __tablename__ = "b"
+    id = Column(Integer, primary_key=True)
+    a_id = Column(ForeignKey("a.id"))
+    data = Column(String)
+    a = relationship("A", back_populates="bs")
+```
+
+Above, if we create a _B()_ that refers to a specific _A()_, the _back populates_ will then __add the B() to the A.bs collection__, however if the value of _B.data_ is __not set yet__, the key will be `None`:
+
+```
+a1 = A()
+b1 = B(a=a1)
+```
+
+Setting _b1.data_ after the fact __does not update the collection__:
+
+```
+b1.data = "the key"
+```
+
+This can also be seen if one attempts to _set up B() in the constructor_. The _order of arguments changes the result_:
+
+```
+B(a=a1, data="the key")
+B(data="the key", a=a1)
+```
+
+If _backrefs_ are being used in this way, __ensure that attributes are populated in the correct order__ using an `__init__` method.
+
+An `event handler` such as the following may also be used to __track changes in the collection__ as well.
